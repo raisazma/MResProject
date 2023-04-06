@@ -1,0 +1,116 @@
+library(Seurat)
+
+#### some objects????? save them somewhere
+subset.cbl <- readRDS(file = "~/SeuratProject/subset.cbl.rds")
+subset.cerebellum.data <- readRDS(file = "~/SeuratProject/subset.cerebellum.rds")
+"~/SeuratProject/seurat_integrated.sct"
+### remove
+#DefaultAssay(subset.cbl) <- "RNA"
+
+subset.cerebellum.data@meta.data[, "protocol"] <- "lu.data"
+subset.cbl@meta.data[, "protocol"] <- "aldinger.data"
+
+data_list <- list()
+data_list[["aldinger"]] <- subset.cbl
+data_list[["lu"]] <- subset.cerebellum.data
+
+### once they are in the list we don't need the objects in the memory
+rm(subset.cbl)
+rm(subset.cerebellum.data)
+seurat_integrated.sct <- readRDS("~/SeuratProject/seurat_integrated.sct")
+
+# data_list <- lapply(X = data_list, FUN = function(x) {
+#   x <- NormalizeData(x)
+#   x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 2000)
+# })
+
+### lets try an sctransform this time
+data_list <- lapply(X = data_list, FUN = SCTransform)
+
+#data_list[[1]] <- ScaleData(data_list[[1]])
+#data_list[[1]] <- RunPCA(data_list[[1]], npcs = 30)
+
+#data_list[[2]] <- ScaleData(data_list[[2]])
+#data_list[[2]] <- RunPCA(data_list[[2]], npcs = 30)
+
+features <- SelectIntegrationFeatures(object.list = data_list, nfeatures = 3000)
+data_list <- PrepSCTIntegration(object.list = data_list, anchor.features = features)
+
+### I have blanked out the rpca version
+#data_anchors <- FindIntegrationAnchors(object.list = data_list, anchor.features = features, reduction = "rpca")
+#seurat_integrated  <- IntegrateData(anchorset = data_anchors, dims = 1:30)
+
+data_anchors <- FindIntegrationAnchors(object.list = data_list, normalization.method = "SCT", anchor.features = features)
+seurat_integrated.sct <- IntegrateData(anchorset = data_anchors, normalization.method = "SCT")
+
+# ## set the assay to RNA and visualize the datasets before integration
+# DefaultAssay(seurat_integrated) <- "RNA"
+# 
+# seurat_integrated <- NormalizeData(seurat_integrated, verbose = F)
+# seurat_integrated <- FindVariableFeatures(seurat_integrated, selection.method = "vst", nfeatures = 2000, verbose = F)
+# seurat_integrated <- ScaleData(seurat_integrated, verbose = F)
+# seurat_integrated <- RunPCA(seurat_integrated, npcs = 30, verbose = F)
+# seurat_integrated <- RunUMAP(seurat_integrated, reduction = "pca", dims = 1:30, verbose = F)
+# 
+# # UMAP plot of the datasets before integration
+# DimPlot(seurat_integrated,reduction = "umap")
+# DimPlot(seurat_integrated,reduction = "umap", group.by = "orig.ident")
+
+# integrated
+DefaultAssay(seurat_integrated.sct) <- "integrated"
+# seurat_integrated <- ScaleData(seurat_integrated, verbose = F)
+seurat_integrated.sct <- RunPCA(seurat_integrated.sct, npcs = 30, verbose = F)
+seurat_integrated.sct <- RunUMAP(seurat_integrated.sct, reduction = "pca", dims = 1:30, verbose = F)
+seurat_integrated.sct <- RunTSNE(seurat_integrated.sct, dims = 1:30)
+
+# plot integrated UMAP
+p1 <- DimPlot(seurat_integrated.sct, reduction = "umap")
+plot(p1)
+
+# plot integrated relationship to aldinger
+p2 <- DimPlot(seurat_integrated.sct, reduction = "umap", group.by = "figure_clusters") 
+plot(p2)
+
+# plot integrated relationship to lu
+p3 <- DimPlot(seurat_integrated.sct, group.by = "cluster.names")
+plot(p3)
+
+# plot the splitted UMAP to make the comparison easier
+p4 <- DimPlot(seurat_integrated.sct, reduction = "umap", split.by = "protocol", label = T)
+plot(p4)
+
+p1+p2+p3+p4
+
+# plot TSNE
+tsne1 <- DimPlot(seurat_integrated.sct, reduction = "tsne", label = TRUE, group.by = "protocol")
+tsne2 <- DimPlot(seurat_integrated.sct, reduction = "tsne", label = TRUE, group.by = "figure_clusters")
+tsne3 <- DimPlot(seurat_integrated.sct, reduction = "tsne", label = TRUE, group.by = "cluster.names")
+tsne4 <- DimPlot(seurat_integrated.sct, reduction = "tsne", label = TRUE)
+
+
+##### cluster the integrated matrix and look how clusters are distributed between the two sets
+seurat_integrated.sct <- FindNeighbors(seurat_integrated.sct, dims = 1:30, k.param = 10, verbose = F)
+seurat_integrated.sct <- FindClusters(seurat_integrated.sct, verbose = F)
+
+# see new clusters
+levels(x = seurat_integrated.sct)
+
+# calculate the number of cells in each cluster that came for aldinger or lu dataset
+count_table_aldinger <- table(seurat_integrated.sct@meta.data$figure_clusters, seurat_integrated.sct@meta.data$protocol)
+count_table_lu <- table(seurat_integrated.sct@meta.data$cluster.names, seurat_integrated.sct@meta.data$protocol)
+count_table <- table(seurat_integrated.sct@meta.data$seurat_clusters, seurat_integrated.sct@meta.data$protocol)
+count_table_aldinger_lu <- table(seurat_integrated.sct@meta.data$figure_clusters, seurat_integrated.sct@meta.data$cluster.names)
+count_table_aldinger_clusters <- table(seurat_integrated.sct@meta.data$seurat_clusters, seurat_integrated.sct@meta.data$figure_clusters)
+count_table_lu_clusters <- table(seurat_integrated.sct@meta.data$seurat_clusters, seurat_integrated.sct@meta.data$cluster.names)
+
+# table showing relationship between Aldinger clusters and my new integrated clusters
+write.table(count_table_aldinger_clusters, file='~/SeuratProject/aldinger_clusters.txt')
+
+# table showing relationship between Lu clusters and my new integrated clusters
+write.table(count_table_lu_clusters, file='~/SeuratProject/lu_clusters.txt')
+
+# table showing relationship between Aldinger and Lu clusters
+write.table(count_table_aldinger_lu, file='~/SeuratProject/aldinger_lu.txt')
+
+# table showing relationship between both Aldinger and Lu and new integrated clusters
+write.table(count_table, file='~/SeuratProject/aldinger_lu_clusters.txt')

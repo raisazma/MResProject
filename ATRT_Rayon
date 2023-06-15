@@ -1,0 +1,290 @@
+library(dplyr)
+
+library(Seurat)
+
+library(patchwork)
+
+library(R.utils)
+
+library(ggplot2)
+
+spinal.cord.big <- readRDS(file = "/home/raisaa/SeuratProject2/ATRT_Rayon/human_neural.rds")
+
+addedmetadata <- read.csv("/home/raisaa/SeuratProject2/ATRT_Rayon/human_rayon_metadata.csv")
+
+gsub("[^0-9_]", "", addedmetadata$X) -> addedmetadata$X.recode
+
+# recode the X.recode column into a new column called X.recode2 according to the following key so that the string _1 is replaced with _1_1_1
+
+recode(addedmetadata$X.recode, "_9" = "_1_1_4",
+       
+       "_10" = "_2_1_4",
+       
+       "_8" = "_2_2_3",
+       
+       "_11" = "_1_2_4",
+       
+       "_12" = "_2_2_4",
+       
+       "_7" = "_1_2_3",
+       
+       "_3" = "_1_2",
+       
+       "_2" = "_2_1",
+       
+       "_1" = "_1_1",
+       
+       "_5" = "_1_1_3",
+       
+       "_6" = "_2_1_3",
+       
+       "_4" = "_2_2") -> addedmetadata$X.recode2
+
+paste0(gsub("\\_.*","",addedmetadata$X), addedmetadata$X.recode2) -> addedmetadata$X.recode3
+
+table(addedmetadata$X.recode2)
+
+match(names(spinal.cord.big$orig.ident), addedmetadata$X.recode3) -> match.idx
+
+addedmetadata.matched <- addedmetadata[match.idx,]
+
+type_step1 <- addedmetadata.matched[,"Type_step1"]
+
+names(type_step1) <- rownames(spinal.cord.big@meta.data)
+
+spinal.cord.big$type <- type_step1
+
+# Create an object of chosen cell types
+chosen.cell.types <- c("DRG Progenitor","Mesoderm I","Mesoderm II","Mesoderm III","Mesoderm IV","Mesoderm V","Mesoderm VI","Neural crest progenitor",
+                       "Neuron","Oligodendrocyte","Peripheral Neuron","Progenitor","Sensory neuron progenitor")
+
+### subset the columns of this large seurat object to give only the cluster we want
+spinal.cord.big <- spinal.cord.big[,spinal.cord.big$type%in%chosen.cell.types]
+
+# Set the default assay
+DefaultAssay(spinal.cord.big) <- "RNA"
+
+# Perform quality control
+spinal.cord.big[["percent.mt"]] <- PercentageFeatureSet(spinal.cord.big, pattern = "^mt-")
+
+# Show QC metrics for the first 5 cells
+head(spinal.cord.big@meta.data, 5)
+
+# Visualize QC metrics as a violin plot
+Rayon.qc.metrics <- VlnPlot(spinal.cord.big, features = c("nFeature_RNA", "nCount_RNA", "percent_mt"), ncol = 3, pt.size=0, group.by="type")
+Rayon.qc.metrics1 <- VlnPlot(spinal.cord.big, features = c("nFeature_RNA"), group.by="type", pt.size=0)
+Rayon.qc.metrics2 <- VlnPlot(spinal.cord.big, features = c("nCount_RNA"), group.by="type", pt.size=0)
+Rayon.qc.metrics3 <- VlnPlot(spinal.cord.big, features = c("percent_mt"), group.by="type", pt.size=0)
+ggsave(Rayon.qc.metrics, height = 14, width = 21, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Basic Seurat/Rayon_QC_Metrics.png")
+
+# Feature scatter to visualize feature-feature relationships
+FeatureScatter(spinal.cord.big, feature1 = "nCount_RNA", feature2 = "nFeature_RNA") + geom_smooth(method = 'lm')
+plot1 <- FeatureScatter(spinal.cord.big, feature1 = "nCount_RNA", feature2 = "percent_mt", group.by = "type")
+plot2 <- FeatureScatter(spinal.cord.big, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", group.by = "type")
+Rayon.featurerelationships <- plot1 + plot2 
+ggsave(Rayon.featurerelationships, height = 14, width = 21, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Basic Seurat/Rayon_nCount_nFeature_relationship.png")
+
+# Set cutoff parameters
+spinal.cord.big <- subset(spinal.cord.big, subset = nFeature_RNA > 200 & nFeature_RNA < 2500 & percent_mt < 10)
+
+# Normalise data
+spinal.cord.big <- NormalizeData(spinal.cord.big)
+
+# plot variable features with and without labels
+spinal.cord.big <- FindVariableFeatures(spinal.cord.big, selection.method = "vst", nfeatures = 2000)
+
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(spinal.cord.big), 10)
+
+# plot variable features with and without labels
+plot1Rayon <- VariableFeaturePlot(spinal.cord.big) + theme_classic()
+plot2Rayon <- LabelPoints(plot = plot1Rayon, points = top10, repel = TRUE, xnudge = 0,ynudge=0) + theme_classic()
+plot1plot2 <- plot_grid(plot1Rayon,plot2Rayon,nrow=1)
+ggsave(plot1Rayon+plot2Rayon, height = 10, width = 10, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Basic Seurat/Rayon_VariableFeatures.png")
+
+# Scale data prior to performing dimensionality reduction
+spinal.cord.big <- ScaleData(spinal.cord.big)
+
+# perform linear dimensional reduction
+spinal.cord.big <- RunPCA(spinal.cord.big, features = VariableFeatures(object = spinal.cord.big))
+
+# Examine and visualize PCA results a few different ways
+print(spinal.cord.big[["pca"]], dims = 1:5, nfeatures = 5)
+
+# Visualise PCA
+# VizDimLoadings
+Rayon_vizdimloadings <- VizDimLoadings(spinal.cord.big, dims = 1:2, reduction = "pca")
+ggsave(Rayon_vizdimloadings, height=8, width=10,file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Basic Seurat/Rayon_Vizdimloadings.png")
+
+# DimPlot
+Rayon_pca <- DimPlot(spinal.cord.big, reduction = "pca")
+ggsave(Rayon_pca, height=10,width=11,file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Basic Seurat/Rayon_PCA.png")
+
+# Heatmap
+png(file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Basic Seurat/Rayon_PCAHeatmap.png", height = 20, width = 20, units = "cm", res = 300)
+DimHeatmap(spinal.cord.big, dims = 1:9, cells = 500, balanced = TRUE)
+dev.off()
+graphics.off()
+
+### Determine the ‘dimensionality’ of the dataset
+Rayon_elbowplot <- ElbowPlot(spinal.cord.big) + theme_classic()
+ggsave(Rayon_elbowplot, height=7,width=8,file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Basic Seurat/Rayon_ElbowPlot.png")
+
+# Cluster the cells
+spinal.cord.big <- FindNeighbors(spinal.cord.big, dims = 1:15)
+spinal.cord.big <- FindClusters(spinal.cord.big, resolution = 0.5)
+
+# Look at cluster IDs of the first 5 cells
+head(Idents(spinal.cord.big), 5)
+
+#### store the current clustering in a variable Idents(spinal.cord.big) -> spinal.cord.big$my_new_clustering
+
+# Perform non-linear dimensional reduction
+spinal.cord.big <- RunUMAP(spinal.cord.big, dims = 1:10)
+p1 <- DimPlot(spinal.cord.big, reduction = "umap", label = T, group.by = "type")
+p2 <- DimPlot(spinal.cord.big, reduction = "umap", label = T)
+Rayon_umap <- p1+p2
+ggsave(Rayon_umap, width = 23, height = 11, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Basic Seurat/Rayon_UMAP.png")
+
+##### SAVE ALL OBJECTS ######
+library(cowplot)
+grid_Rayon_qcmetrics <- plot_grid(Rayon.qc.metrics1, Rayon.qc.metrics2, Rayon.qc.metrics3,labels=c("a"," "," "), nrow=1)
+
+grid_Rayon_dimreduct <- plot_grid(Rayon_elbowplot, Rayon_pca, labels=c("c","d"), nrow=1) 
+
+grid_Rayon_dimreduct2 <- plot_grid(p1,p2,labels=c("e","f"),nrow=1)
+
+grid_all_Rayon <- plot_grid(grid_Rayon_qcmetrics, grid_Rayon_dimreduct, grid_Rayon_dimreduct2, labels=c(" ",""," "),nrow = 3)
+
+ggsave(grid_all_Rayon, height=25, width=20, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Basic Seurat/grid_all_Rayon.png")
+
+#################### PROJECTION ####################
+# Install and load libraries
+library("NMF")
+library("MASS")
+library(biomaRt)
+
+# Extract the values for the projection
+DefaultAssay(object = spinal.cord.big) <- "RNA"
+
+# Extract the normalised count data
+tpms.mat.in <- as.data.frame(spinal.cord.big[["RNA"]]@scale.data)
+
+ensembl_IDs <- rownames(tpms.mat.in)
+
+mart <- useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl",  host="https://useast.ensembl.org")
+
+symbols <- getBM(attributes = c("hgnc_symbol", "ensembl_gene_id"),  
+                 filters = "hgnc_symbol",
+                 ensembl_IDs,
+                 mart = mart)
+
+annotatedix  <- match(ensembl_IDs, symbols$hgnc_symbol)
+symbols[annotatedix,]  ->  annotatedGenes
+tpms.mat.in$ensembl_gene_id <- annotatedGenes$ensembl_gene_id
+
+#Remove duplicated rows using:
+tpms.mat.in <- tpms.mat.in[!duplicated(tpms.mat.in$ensembl_gene_id),]  
+
+#Remove transcripts with no gene annotation using:
+tpms.mat.in <- na.omit(tpms.mat.in)
+
+#Set gene IDs as rownames and remove column:
+rownames(tpms.mat.in) <- tpms.mat.in$ensembl_gene_id
+tpms.mat.in$ensembl_gene_id <- NULL
+
+# Load required data objects
+nmf.res <- readRDS(file = "/home/raisaa/SeuratProject2/nmf.res.atrt.rds")
+
+# Load sample data as matrix object
+source(file = "/home/raisaa/Group3-4App-main/StarProtocols_Guide/R/Project_NMF.R")
+
+# Project NMF model to sequencing data
+tpms.mat <- project.NMF(input.array = as.matrix(tpms.mat.in), nmf.result = nmf.res)
+
+# Rows 3 in tpms.mat correspond to the ATRT metagene, extract them from the data and transpose matrix
+atrt.tpms <- t(tpms.mat[c(3),]) 
+
+# Apply logistic transformation to metagenes
+logistic.atrt.tpms <- apply(atrt.tpms,2,function(x){(1 / (1 + exp(-x)))}) 
+
+# Present output as data frame for export
+logistic.atrt.tpms <- as.data.frame(logistic.atrt.tpms)
+data.frame(logistic.atrt.tpms)
+
+# Projected results, map them back onto the seurat object
+logistic.atrt.tpms -> spinal.cord.big$logistic.atrt.tpms
+as.numeric(tpms.mat[3,]) -> spinal.cord.big$ATRT_metagene
+
+# Plot violin plots for each metagenes
+Rayon_atrt_violinplot <- VlnPlot(spinal.cord.big, features = "ATRT_metagene", group.by = "type")
+Rayon_dimplot <- DimPlot(object = spinal.cord.big, label=F, group.by = "type")
+Rayon_atrt_featureplot <- FeaturePlot(object = spinal.cord.big,"ATRT_metagene", min.cutoff = 0.5)
+
+ggsave(Rayon_atrt_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/FP_Projection.png")
+ggsave(Rayon_atrt_violinplot, width = 13, height = 11, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/VP_Projection.png")
+exampleplot_atrtmetagene <- plot_grid(Rayon_atrt_featureplot, Rayon_dimplot, Rayon_atrt_violinplot, ncol = 2, nrow=2)
+ggsave(exampleplot_atrtmetagene, width = 17, height = 13, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/ATRT_Projection.png")
+
+#################### SUBGROUP PROJECTION ####################
+# Load required data objects
+nmf.res <- readRDS(file = "/home/raisaa/SeuratProject2/nmf.res.atrt.subgrp.rds")
+
+# Load sample data as matrix object
+source(file = "/home/raisaa/Group3-4App-main/StarProtocols_Guide/R/Project_NMF.R")
+
+# Project NMF model to sequencing data
+tpms.mat <- project.NMF(input.array = as.matrix(tpms.mat.in), nmf.result = nmf.res)
+
+# Rows 3 in tpms.mat correspond to the ATRT metagene, extract them from the data and transpose matrix
+atrt.tpms <- t(tpms.mat[c(3,2,1),]) 
+
+# Apply logistic transformation to metagenes
+logistic.atrt.tpms <- apply(atrt.tpms,2,function(x){(1 / (1 + exp(-x)))}) 
+
+# Present output as data frame for export
+logistic.atrt.tpms <- as.data.frame(logistic.atrt.tpms)
+data.frame(logistic.atrt.tpms)
+
+# Projected results, map them back onto the seurat object
+#logistic.atrt.tpms -> spinal.cord.big$logistic.atrt.tpms
+as.numeric(tpms.mat[3,]) -> spinal.cord.big$SHH_metagene
+as.numeric(tpms.mat[2,]) -> spinal.cord.big$MYC_metagene
+as.numeric(tpms.mat[1,]) -> spinal.cord.big$TYR_metagene
+
+# Plot violin plots for each metagenes
+Rayon_atrt_violinplot <- VlnPlot(spinal.cord.big, features = "ATRT_metagene", group.by = "type", pt.size=0) + theme(legend.position = "none")
+Rayon_dimplot <- DimPlot(object = spinal.cord.big, group.by = "type", label=T)
+Rayon_atrt_featureplot <- FeaturePlot(object = spinal.cord.big,  "ATRT_metagene", min.cutoff = 0)
+
+# Plot violin plots for each metagenes
+Rayon_shh_violinplot <- VlnPlot(spinal.cord.big, features = "SHH_metagene", group.by = "type", pt.size=0) + theme(legend.position = "none")   
+Rayon_myc_violinplot <- VlnPlot(spinal.cord.big, features = "MYC_metagene", group.by = "type", pt.size=0) + theme(legend.position = "none")
+Rayon_tyr_violinplot <- VlnPlot(spinal.cord.big, features = "TYR_metagene", group.by = "type", pt.size=0) + theme(legend.position = "none")   
+
+Rayon_shh_featureplot <- FeaturePlot(object = spinal.cord.big, 
+                                     features = "SHH_metagene", 
+                                     cols = c("grey", "green"), 
+                                     min.cutoff = 0)
+Rayon_myc_featureplot <- FeaturePlot(object = spinal.cord.big, "MYC_metagene", cols = c("grey","yellow"), min.cutoff = 0)
+Rayon_tyr_featureplot <- FeaturePlot(object = spinal.cord.big, "TYR_metagene", cols = c("grey","red"),min.cutoff=0) 
+
+ggsave(Rayon_shh_violinplot, width = 13, height = 11, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/VP_shhProjection.png") 
+ggsave(Rayon_myc_violinplot, width = 13, height = 11, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/VP_mycProjection.png")
+ggsave(Rayon_tyr_violinplot, width = 13, height = 11, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/VP_tyrProjection.png")
+VP_All_Rayon <- plot_grid(Rayon_atrt_violinplot,Rayon_shh_violinplot,Rayon_myc_violinplot,Rayon_tyr_violinplot, ncol=2, nrow=2) +theme(legend.position = "right")
+ggsave(VP_All_Rayon,  width = 14, height = 12, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/VP_All_Projection.png")
+
+ggsave(Rayon_shh_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/FP_shhProjection.png")
+ggsave(Rayon_myc_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/FP_mycProjection.png")
+ggsave(Rayon_tyr_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/FP_tyrProjection.png")
+FP_All_Rayon <- plot_grid(Rayon_atrt_featureplot,Rayon_shh_featureplot,Rayon_myc_featureplot,Rayon_tyr_featureplot, ncol=2, nrow=2) +theme(legend.position = "right")
+ggsave(FP_All_Rayon,  width = 14, height = 11, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/FP_All_Projection.png")
+
+ggsave(FP_All_Rayon+VP_All_Rayon, width = 28, height = 13, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/FP_VP_All_Projection.png")
+
+all <- plot_grid(Rayon_dimplot,FP_All_Rayon,VP_All_Rayon, width=23, height=13, rel_widths = c(0.9,1,1))
+ggsave(all, width = 30, height = 20, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/FP_VP_All_Projection.png")
+
+saveRDS(spinal.cord.big, file="~/SeuratProject2/ATRT_Rayon/spinal.cord.big.rds")
+

@@ -1,7 +1,9 @@
-#sequenced cells from 10 individuals during the first trimester 
-#of human development, from Carnegie stages (CS) 12 to 22 or gestational weeks 6–10. 
+#sequenced brain cells from 10 individuals during the first trimester 
+#of human development, from Carnegie stages (CS) 12 to 22 or GW 6–10. 
+# ‘other’: endothelial cells, microglia and pericytes 
 # https://www.nature.com/articles/s41593-020-00794-1
 # https://cells-test.gi.ucsc.edu/?ds=early-brain
+# ipc: intermediate progenitor cells
 
 library(dplyr)
 library(Seurat)
@@ -20,12 +22,23 @@ genes = gsub(".+[|]", "", genes)
 mat = data.frame(mat[,-1], row.names=genes)
 brain.data2 <- CreateSeuratObject(counts = mat, meta.data=meta)
 
-annotations <- read.csv("/home/raisaa/SeuratProject2/ATRT_Eze/celllabels.csv")
-brain.data2$Cell.Type <- annotations$Cell.Type
+row.names(mat)
 
-Cell.Type <- annotations[,"Cell.Type"]
+annotations <- read.csv("/home/raisaa/SeuratProject2/ATRT_Eze/celllabels.csv")
+
+match.idx <- match(rownames(brain.data2@meta.data), annotations$Cell)
+annotations.matched <- annotations[match.idx,]
+
+Cell.Type <- annotations.matched[,"Cell.Type"]
 names(Cell.Type) <- rownames(brain.data2@meta.data)
 brain.data2$Cell.Type <- Cell.Type
+
+match.idx <- match(rownames(brain.data2@meta.data), annotations$Progenitor.Cluster.Original)
+annotations.matched <- annotations[match.idx,]
+
+Progenitor.Cluster.Original <- annotations.matched[,"Progenitor.Cluster.Original"]
+names(Progenitor.Cluster.Original) <- rownames(brain.data2@meta.data)
+brain.data2$Progenitor.Cluster.Original <- Progenitor.Cluster.Original
 
 # Set the default assay
 DefaultAssay(brain.data2) <- "RNA"
@@ -36,14 +49,26 @@ brain.data2[["percent.mt"]] <- PercentageFeatureSet(brain.data2, pattern = "^MT-
 # Show QC metrics for the first 5 cells
 head(brain.data2@meta.data, 5)
 
+# List names of all cell types
+list(brain.data2$Cell.Type)
+
+# Create an object of chosen cell types
+chosen.cell.types <- c("IPC","Mesenchymal","Neuroepithelial","Neuronal","Radial Glial")
+
+### subset the columns of this large seurat object to give only the cluster we want
+brain.data2 <- brain.data2[,brain.data2$Cell.Type%in%chosen.cell.types]
+
 # Visualize QC metrics as a violin plot
-eze.qc.metrics <- VlnPlot(brain.data2, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, group.by="Area")
+eze.qc.metrics <- VlnPlot(brain.data2, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, group.by="Cell.Type", pt.size=0)
+eze.qc.metrics1 <- VlnPlot(brain.data2, features = c("nFeature_RNA"), group.by="Cell.Type", pt.size=0)
+eze.qc.metrics2 <- VlnPlot(brain.data2, features = c("nCount_RNA"), group.by="Cell.Type", pt.size=0)
+eze.qc.metrics3 <- VlnPlot(brain.data2, features = c("percent.mt"), group.by="Cell.Type", pt.size=0)
 ggsave(eze.qc.metrics, height = 14, width = 21, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Basic Seurat/Eze_QC_Metrics.png")
 
 # Feature scatter to visualize feature-feature relationships
-FeatureScatter(brain.data2, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", group.by = "Area") + geom_smooth(method = 'lm')
-plot1 <- FeatureScatter(brain.data2, feature1 = "nCount_RNA", feature2 = "percent.mt")
-plot2 <- FeatureScatter(brain.data2, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+FeatureScatter(brain.data2, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", group.by = "Cell.Type") + geom_smooth(method = 'lm')
+plot1 <- FeatureScatter(brain.data2, feature1 = "nCount_RNA", feature2 = "percent.mt", group.by = "Cell.Type")
+plot2 <- FeatureScatter(brain.data2, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", group.by = "Cell.Type")
 eze.featurerelationships <- plot1 + plot2 
 ggsave(eze.featurerelationships, height = 14, width = 21, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Basic Seurat/Eze_nCount_nFeature_relationship.png")
 
@@ -80,7 +105,7 @@ eze_vizdimloadings <- VizDimLoadings(brain.data2, dims = 1:2, reduction = "pca")
 ggsave(eze_vizdimloadings, height=8, width=10,file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Basic Seurat/Eze_Vizdimloadings.png")
 
 # DimPlot
-eze_pca <- DimPlot(brain.data2, reduction = "pca", group.by = "Area")
+eze_pca <- DimPlot(brain.data2, reduction = "pca", group.by = "Cell.Type")
 ggsave(eze_pca, height=10,width=11,file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Basic Seurat/Eze_PCA.png")
 
 # Heatmap
@@ -102,23 +127,65 @@ head(Idents(brain.data2), 5)
 
 # Perform non-linear dimensional reduction
 brain.data2 <- RunUMAP(brain.data2, dims = 1:10)
-p1 <- DimPlot(brain.data2, reduction = "umap", label = T)
-p2 <- DimPlot(brain.data2, reduction = "umap", label = T, group.by = "Area")
+p1 <- DimPlot(brain.data2, reduction = "umap", label = T, group.by="Cell.Type")
+p2 <- DimPlot(brain.data2, reduction = "umap", label = T, group.by = "seurat_clusters")
 eze_umap <- p1+p2
 ggsave(eze_umap, width = 23, height = 11, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Basic Seurat/Eze_UMAP.png")
 
 saveRDS(brain.data2, file="~/SeuratProject2/ATRT_Eze/brain.data2.rds")
 
-#################### PROJECTION ####################
-# Extract the values for the projection
-DefaultAssay(object = brain.data2) <- "RNA"
+############# SAVE OBJECTS ##############
+##### SAVE ALL OBJECTS ######
+library(cowplot)
+grid_eze_qcmetrics <- plot_grid(eze.qc.metrics1, eze.qc.metrics2, eze.qc.metrics3,labels=c("a"," "," "), nrow=1)
 
-# Extract the normalised count data
-tpms.mat <- brain.data2[["RNA"]]@scale.data
+grid_eze_dimreduct <- plot_grid(eze_elbowplot, eze_pca, labels=c("c","d"), nrow=1) 
+
+grid_eze_dimreduct2 <- plot_grid(p1,p2,labels=c("e","f"),nrow=1)
+
+ggsave(grid_eze_dimreduct, height=12,width=20,file="~/SeuratProject/eze data analysis/Subset/grid_eze_subset_dimreduct.png")
+
+grid_all_eze_subset <- plot_grid(grid_eze_qcmetrics, grid_eze_dimreduct, grid_eze_dimreduct2, labels=c(" ",""," "),nrow = 3)
+
+ggsave(grid_all_eze_subset, height=25, width=20, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Basic Seurat/grid_all_eze.png")
+
+#################### PROJECTION ####################
+brain.data2 <- readRDS(file="/home/raisaa/SeuratProject2/ATRT_Eze/brain.data2.rds")
+tpms.mat.in <- readRDS(file="/home/raisaa/SeuratProject2/ATRT_Eze/tpms.mat.in.rds")
 
 # Install and load libraries
 library("NMF")
 library("MASS")
+library(biomaRt)
+
+# Extract the values for the projection
+DefaultAssay(object = brain.data2) <- "RNA"
+
+# Extract the normalised count data
+tpms.mat.in <- as.data.frame(brain.data2[["RNA"]]@scale.data)
+
+ensembl_IDs <- rownames(tpms.mat.in)
+
+mart <- useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", host="https://useast.ensembl.org")
+
+symbols <- getBM(attributes = c("hgnc_symbol", "ensembl_gene_id"),  
+                 filters = "hgnc_symbol",
+                 ensembl_IDs,
+                 mart = mart)
+
+annotatedix  <- match(ensembl_IDs, symbols$hgnc_symbol)
+symbols[annotatedix,]  ->  annotatedGenes
+tpms.mat.in$ensembl_gene_id <- annotatedGenes$ensembl_gene_id
+
+#Remove duplicated rows using:
+tpms.mat.in <- tpms.mat.in[!duplicated(tpms.mat.in$ensembl_gene_id),]  
+
+#Remove transcripts with no gene annotation using:
+tpms.mat.in <- na.omit(tpms.mat.in)
+
+#Set gene IDs as rownames and remove column:
+rownames(tpms.mat.in) <- tpms.mat.in$ensembl_gene_id
+tpms.mat.in$ensembl_gene_id <- NULL
 
 # Load required data objects
 nmf.res <- readRDS(file = "/home/raisaa/SeuratProject2/nmf.res.atrt.rds")
@@ -127,15 +194,13 @@ nmf.res <- readRDS(file = "/home/raisaa/SeuratProject2/nmf.res.atrt.rds")
 source(file = "/home/raisaa/Group3-4App-main/StarProtocols_Guide/R/Project_NMF.R")
 
 # Project NMF model to sequencing data
-tpms.mat <- project.NMF(input.array = as.matrix(tpms.mat), nmf.result = nmf.res)
+tpms.mat <- project.NMF(input.array = as.matrix(tpms.mat.in), nmf.result = nmf.res)
 
 # Rows 3 in tpms.mat correspond to the ATRT metagene, extract them from the data and transpose matrix
-atrt.tpms <- t(tpms.mat[c(3),]) 
-metagene_num <- 3
-atrt.tpms <- t(tpms.mat[metagene_num,])
+atrt.tpms <- t(tpms.mat[c(3),])
 
 # Apply logistic transformation to metagenes
-logistic.atrt.tpms <- apply(atrt.tpms,2,function(x){(1 / (1 + exp(-x)))}) 
+logistic.atrt.tpms <- apply(atrt.tpms,2,function(x){(1 / (1 + exp(-x)))})
 
 # Present output as data frame for export
 logistic.atrt.tpms <- as.data.frame(logistic.atrt.tpms)
@@ -143,12 +208,12 @@ data.frame(logistic.atrt.tpms)
 
 # Projected results, map them back onto the seurat object
 logistic.atrt.tpms -> brain.data2$logistic.atrt.tpms
-as.numeric(tpms.mat[3,]) -> brain.data2$atrt
+as.numeric(tpms.mat[3,]) -> brain.data2$ATRT_metagene
 
 # Plot violin plots for each metagenes
-eze_atrt_violinplot <- VlnPlot(brain.data2, features = "atrt", group.by = "Cell.Type")
+eze_atrt_violinplot <- VlnPlot(brain.data2, features = "ATRT_metagene", group.by = "Cell.Type",pt.size=0)
 eze_dimplot <- DimPlot(object = brain.data2, group.by = "Cell.Type", label = T)
-eze_atrt_featureplot <- FeaturePlot(object = brain.data2,  "atrt", min.cutoff = 0, label = T)
+eze_atrt_featureplot <- FeaturePlot(object = brain.data2,  "ATRT_metagene", min.cutoff = 0, label = T)
 
 ggsave(eze_atrt_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/FP_Projection.png")
 ggsave(eze_atrt_violinplot, width = 13, height = 11, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/VP_Projection.png")
@@ -157,13 +222,6 @@ ggsave(eze_atrt_violinplot, width = 13, height = 11, file="~/SeuratProject2/ATRT
 # Extract the values for the projection
 DefaultAssay(object = brain.data2) <- "RNA"
 
-# Extract the normalised count data
-tpms.mat <- brain.data2[["RNA"]]@scale.data
-
-# Install and load libraries
-library("NMF")
-library("MASS")
-
 # Load required data objects
 nmf.res <- readRDS(file = "/home/raisaa/SeuratProject2/nmf.res.atrt.subgrp.rds")
 
@@ -171,13 +229,13 @@ nmf.res <- readRDS(file = "/home/raisaa/SeuratProject2/nmf.res.atrt.subgrp.rds")
 source(file = "/home/raisaa/Group3-4App-main/StarProtocols_Guide/R/Project_NMF.R")
 
 # Project NMF model to sequencing data
-tpms.mat <- project.NMF(input.array = as.matrix(tpms.mat), nmf.result = nmf.res)
+tpms.mat <- project.NMF(input.array = as.matrix(tpms.mat.in), nmf.result = nmf.res)
 
 # Rows 3 in tpms.mat correspond to the ATRT metagene, extract them from the data and transpose matrix
-atrt.tpms <- t(tpms.mat[c(1,2,3),]) 
+atrt.tpms <- t(tpms.mat[c(3),])
 
 # Apply logistic transformation to metagenes
-logistic.atrt.tpms <- apply(atrt.tpms,2,function(x){(1 / (1 + exp(-x)))}) 
+logistic.atrt.tpms <- apply(atrt.tpms,2,function(x){(1 / (1 + exp(-x)))})
 
 # Present output as data frame for export
 logistic.atrt.tpms <- as.data.frame(logistic.atrt.tpms)
@@ -190,27 +248,26 @@ as.numeric(tpms.mat[2,]) -> brain.data2$MYC_metagene
 as.numeric(tpms.mat[1,]) -> brain.data2$TYR_metagene
 
 # Plot violin plots for each metagenes
-eze_atrt_violinplot <- VlnPlot(brain.data2, features = "atrt", group.by = "Cell.Type")
-eze_dimplot <- DimPlot(object = brain.data2, group.by = "Cell.Type", label = T)
-eze_atrt_featureplot <- FeaturePlot(object = brain.data2,  "atrt", min.cutoff = 0)
-
-# Plot violin plots for each metagenes
-eze_shh_violinplot <- VlnPlot(brain.data2, features = "SHH_metagene", group.by = "Cell.Type")
-eze_myc_violinplot <- VlnPlot(brain.data2, features = "MYC_metagene" ,group.by = "Cell.Type")
-eze_tyr_violinplot <- VlnPlot(brain.data2, features = "TYR_metagene" ,group.by = "Cell.Type")
+eze_shh_violinplot <- VlnPlot(brain.data2, features = "SHH_metagene", group.by = "Cell.Type", pt.size=0)
+eze_myc_violinplot <- VlnPlot(brain.data2, features = "MYC_metagene" ,group.by = "Cell.Type", pt.size=0)
+eze_tyr_violinplot <- VlnPlot(brain.data2, features = "TYR_metagene" ,group.by = "Cell.Type",pt.size=0)
 
 eze_shh_featureplot <- FeaturePlot(object = brain.data2,  "SHH_metagene", cols = c("grey","green"), min.cutoff = 0, label = T)
-eze_myc_featureplot <- FeaturePlot(object = brain.data2, "MYC_metagene", cols = c("grey","yellow"), min.cutoff = -1, max.cutoff = 0.1, label = T)
+eze_myc_featureplot <- FeaturePlot(object = brain.data2, "MYC_metagene", cols = c("grey","yellow"), min.cutoff = 0, max.cutoff = 0.1, label = T)
 eze_tyr_featureplot <- FeaturePlot(object = brain.data2, "TYR_metagene", cols = c("grey","red"),min.cutoff=0, label = T)
 
 ggsave(eze_shh_violinplot, width = 13, height = 11, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/VP_shhProjection.png")
 ggsave(eze_myc_violinplot, width = 13, height = 11, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/VP_mycProjection.png")
 ggsave(eze_tyr_violinplot, width = 13, height = 11, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/VP_tyrProjection.png")
-VP_All_Eze <- plot_grid(eze_shh_violinplot,eze_myc_violinplot,eze_tyr_violinplot, ncol=2, nrow=2, rel_widths = c(1,1.3)) +theme(legend.position = "right")
+VP_All_Eze <- plot_grid(eze_atrt_violinplot, eze_shh_violinplot,eze_myc_violinplot,eze_tyr_violinplot, ncol=2, nrow=2) +theme(legend.position = "right")
 ggsave(VP_All_Eze,  width = 14, height = 11, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/VP_All_Projection.png")
 
 ggsave(eze_shh_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/FP_shhProjection.png")
 ggsave(eze_myc_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/FP_mycProjection.png")
 ggsave(eze_tyr_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/FP_tyrProjection.png")
-FP_All_Eze <- plot_grid(eze_shh_featureplot,eze_myc_featureplot,eze_tyr_featureplot,eze_dimplot, ncol=2, nrow=2) +theme(legend.position = "right")
+FP_All_Eze <- plot_grid(eze_atrt_featureplot, eze_shh_featureplot,eze_myc_featureplot,eze_tyr_featureplot, ncol=2, nrow=2) +theme(legend.position = "right")
 ggsave(FP_All_Eze,  width = 14, height = 13, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/FP_All_Projection.png")
+
+all <- plot_grid(eze_dimplot,FP_All_Eze,VP_All_Eze, width=23, height=13, rel_widths = c(1,1.2,1))
+ggsave(all, width = 27, height = 19, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/FP_VP_All_Projection.png")
+

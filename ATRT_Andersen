@@ -1,0 +1,573 @@
+# Landscape of human spinal cord cell type diversity at midgestation (GW17 and GW18)
+# https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE188516
+# cell names:  astroglia lineage (floor plate (FP), roof plate (RP), midplate (MP))
+  # cells in the oligodendrocyte lineage (oligodendrocyte progenitor cells (OPCs)/oligodendrocyte (oligo)) 
+  # multipotent glial progenitor cells (mGPCs) 
+  # endothelial cells (ECs), pericytes and vascular leptomeningeal cells (VLMCs), Schwann cells and immune cells (including microglia and monocytes (MG/immune) 
+
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(R.utils)
+library(ggplot2)
+
+# This is the finished object
+# sc.data <- readRDS(file="~/SeuratProject2/ATRT_Andersen/sc.data.rds")
+
+metadata <- read.table("~/SeuratProject2/GSE188516_metadata.tsv")
+data_dir <- "~/SeuratProject2/GSE188516"
+list.files(data_dir)
+expression_matrix <- Read10X(data.dir = data_dir, gene.column=1)
+sc.data = CreateSeuratObject(counts = expression_matrix, meta.data = metadata)
+
+# Set the default assay
+DefaultAssay(sc.data) <- "RNA"
+
+# Perform quality control
+sc.data[["percent.mt"]] <- PercentageFeatureSet(sc.data, pattern = "^MT-")
+
+# Show QC metrics for the first 5 cells
+head(sc.data@meta.data, 5)
+
+# List names of all cell types
+list(sc.data$cell.type)
+
+# Create an object of chosen cell types
+chosen.cell.types <- c("Astrocyte","Cyc. Astro","FP","mGPC","Midplate","Neuron","OPC.Oligo","RP","Schwann")
+
+### subset the columns of this large seurat object to give only the cluster we want
+sc.data <- sc.data[,sc.data$cell.type%in%chosen.cell.types]
+
+# List names of all specific cell ids
+list(sc.data$specific.id)
+
+# Create an object of chosen cell types
+chosen.cell.ids <- c("Active","COP","Cyc_OPC","Cycling","Dorsal_Fibrous_1","Dorsal_Fibrous_2","Dorsal_mGPC","Dorsal_Proto_1","Dorsal_Proto_2","FP","GABA",
+                     "GABA.Glyc","gamma_mn","alpha_mn","Glut","interm.","MFOL","mGPC","Midplate","MOL","NFOL","OPC","RP","Schwann",
+                     "Ventral_Fibrous_1","Ventral_Fibrous_2","Ventral_mGPC","Ventral_Proto_1","Ventral_Proto_2","Ventral_Proto_3","visceral_mn")
+
+### subset the columns of this large seurat object to give only the cluster we want
+sc.data <- sc.data[,sc.data$specific.id%in%chosen.cell.ids]
+
+# Visualize QC metrics as a violin plot
+Andersen.qc.metrics <- VlnPlot(sc.data, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, group.by="cell.type", pt.size=0)
+Andersen.qc.metrics1 <- VlnPlot(sc.data, features = c("nFeature_RNA"), group.by="cell.type", pt.size=0)
+Andersen.qc.metrics2 <- VlnPlot(sc.data, features = c("nCount_RNA"), group.by="cell.type", pt.size=0)
+Andersen.qc.metrics3 <- VlnPlot(sc.data, features = c("percent.mt"), group.by="cell.type", pt.size=0)
+ggsave(Andersen.qc.metrics, height = 14, width = 21, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Basic Seurat/Andersen_QC_Metrics.png")
+
+Andersen.qc.metrics_2 <- VlnPlot(sc.data, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, group.by="specific.id", pt.size=0)
+Andersen.qc.metrics1_2 <- VlnPlot(sc.data, features = c("nFeature_RNA"), group.by="specific.id", pt.size=0)
+Andersen.qc.metrics2_2 <- VlnPlot(sc.data, features = c("nCount_RNA"), group.by="specific.id", pt.size=0)
+Andersen.qc.metrics3_2 <- VlnPlot(sc.data, features = c("percent.mt"), group.by="specific.id", pt.size=0)
+ggsave(Andersen.qc.metrics_2, height = 14, width = 21, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Basic Seurat/2_Andersen_QC_Metrics.png")
+
+# Feature scatter to visualize feature-feature relationships
+FeatureScatter(sc.data, feature1 = "nCount_RNA", feature2 = "nFeature_RNA") + geom_smooth(method = 'lm')
+plot1 <- FeatureScatter(sc.data, feature1 = "nCount_RNA", feature2 = "percent.mt", group.by = "cell.type")
+plot2 <- FeatureScatter(sc.data, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", group.by = "cell.type")
+Andersen.featurerelationships <- plot1 + plot2 
+ggsave(Andersen.featurerelationships, height = 14, width = 21, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Basic Seurat/Andersen_nCount_nFeature_relationship.png")
+
+plot1_2 <- FeatureScatter(sc.data, feature1 = "nCount_RNA", feature2 = "percent.mt", group.by = "specific.id")
+plot2_2 <- FeatureScatter(sc.data, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", group.by = "specific.id")
+Andersen.featurerelationships2 <- plot1_2 + plot2_2
+ggsave(Andersen.featurerelationships2, height = 14, width = 21, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Basic Seurat/2_Andersen_nCount_nFeature_relationship.png")
+
+# Set cutoff parameters
+sc.data <- subset(sc.data, subset = nFeature_RNA > 200 & nFeature_RNA < 2500)
+
+# Normalise data
+sc.data <- NormalizeData(sc.data)
+
+# plot variable features with and without labels
+sc.data <- FindVariableFeatures(sc.data, selection.method = "vst", nfeatures = 2000)
+
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(sc.data), 10)
+
+# plot variable features with and without labels
+plot1Andersen <- VariableFeaturePlot(sc.data) + theme_classic()
+plot2Andersen <- LabelPoints(plot = plot1Andersen, points = top10, repel = TRUE, xnudge = 0,ynudge=0) + theme_classic()
+plot1plot2 <- plot_grid(plot1Andersen,plot2Andersen,nrow=1)
+ggsave(plot1Andersen+plot2Andersen, height = 10, width = 10, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Basic Seurat/Andersen_VariableFeatures.png")
+
+# Scale data prior to performing dimensionality reduction
+sc.data <- ScaleData(sc.data)
+
+# perform linear dimensional reduction
+sc.data <- RunPCA(sc.data, features = VariableFeatures(object = sc.data))
+
+# Examine and visualize PCA results a few different ways
+print(sc.data[["pca"]], dims = 1:5, nfeatures = 5)
+
+# Visualise PCA
+# VizDimLoadings
+Andersen_vizdimloadings <- VizDimLoadings(sc.data, dims = 1:2, reduction = "pca")
+ggsave(Andersen_vizdimloadings, height=8, width=10,file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Basic Seurat/Andersen_Vizdimloadings.png")
+
+# DimPlot
+Andersen_pca <- DimPlot(sc.data, reduction = "pca", group.by = "cell.type")
+ggsave(Andersen_pca, height=10,width=11,file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Basic Seurat/Andersen_PCA.png")
+
+Andersen_pca2 <- DimPlot(sc.data, reduction = "pca", group.by = "specific.id")
+ggsave(Andersen_pca2, height=10,width=11,file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Basic Seurat/2_Andersen_PCA.png")
+
+# Heatmap
+png(file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Basic Seurat/Andersen_PCAHeatmap.png", height = 20, width = 20, units = "cm", res = 300)
+DimHeatmap(sc.data, dims = 1:9, cells = 500, balanced = TRUE)
+dev.off()
+graphics.off()
+
+### Determine the ‘dimensionality’ of the dataset
+Andersen_elbowplot <- ElbowPlot(sc.data) + theme_classic()
+ggsave(Andersen_elbowplot, height=7,width=8,file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Basic Seurat/Andersen_ElbowPlot.png")
+
+# Cluster the cells
+sc.data <- FindNeighbors(sc.data, dims = 1:15)
+sc.data <- FindClusters(sc.data, resolution = 0.5)
+
+# Look at cluster IDs of the first 5 cells
+head(Idents(sc.data), 5)
+
+# Perform non-linear dimensional reduction
+sc.data <- RunUMAP(sc.data, dims = 1:10)
+p1 <- DimPlot(sc.data, reduction = "umap", label = T, group.by = "cell.type")
+p2 <- DimPlot(sc.data, reduction = "umap", label = T)
+Andersen_umap <- p1+p2
+ggsave(Andersen_umap, width = 23, height = 11, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Basic Seurat/Andersen_UMAP.png")
+
+p1_2 <- DimPlot(sc.data, reduction = "umap", label = T, group.by = "specific.id")
+p2_2 <- DimPlot(sc.data, reduction = "umap", label = T, group.by = "seurat_clusters")
+Andersen_umap2 <- p1_2+p2_2
+ggsave(Andersen_umap2, width = 23, height = 11, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Basic Seurat/2_Andersen_UMAP.png")
+
+all_umap <- plot_grid(Andersen_umap,Andersen_umap2, ncol=1)
+ggsave(all_umap, width=20, height=17, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Basic Seurat/1_2_Andersen_UMAP.png")
+
+##### SAVE ALL OBJECTS (cell.type) ######
+library(cowplot)
+grid_Andersen_qcmetrics <- plot_grid(Andersen.qc.metrics1, Andersen.qc.metrics2,labels=c("a"," "), nrow=1)
+
+grid_Andersen_dimreduct <- plot_grid(Andersen_elbowplot, Andersen_pca, labels=c("b","c"), nrow=1) 
+
+grid_Andersen_dimreduct2 <- plot_grid(p1,p2,labels=c("d","e"),nrow=1)
+
+grid_all_Andersen <- plot_grid(grid_Andersen_qcmetrics, grid_Andersen_dimreduct, grid_Andersen_dimreduct2, labels=c(" ",""," "),nrow = 3)
+
+ggsave(grid_all_Andersen, height=25, width=20, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Basic Seurat/grid_all_Andersen.png")
+
+##### SAVE ALL OBJECTS (specific.id) ######
+library(cowplot)
+grid_Andersen_qcmetrics2 <- plot_grid(Andersen.qc.metrics1_2, Andersen.qc.metrics2_2,labels=c("a"," "), nrow=1)
+
+grid_Andersen_dimreduct <- plot_grid(Andersen_elbowplot, Andersen_pca, labels=c("b","c"), nrow=1) 
+
+grid_Andersen_dimreduct2 <- plot_grid(p1_2,p2_2,labels=c("d","e"),nrow=1)
+
+grid_all_Andersen2 <- plot_grid(grid_Andersen_qcmetrics2, grid_Andersen_dimreduct, grid_Andersen_dimreduct2, labels=c(" ",""," "),nrow = 3)
+
+ggsave(grid_all_Andersen2, height=25, width=20, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Basic Seurat/2_grid_all_Andersen.png")
+
+#################### PROJECTION ####################
+# Install and load libraries
+library("NMF")
+library("MASS")
+library(biomaRt)
+
+# Extract the values for the projection
+DefaultAssay(object = sc.data) <- "RNA"
+
+# Extract the normalised count data
+tpms.mat.in <- as.data.frame(sc.data[["RNA"]]@scale.data)
+
+ensembl_IDs <- rownames(tpms.mat.in)
+
+mart <- useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", host="https://useast.ensembl.org")
+
+symbols <- getBM(attributes = c("hgnc_symbol", "ensembl_gene_id"),  
+                 filters = "hgnc_symbol",
+                 ensembl_IDs,
+                 mart = mart)
+
+annotatedix  <- match(ensembl_IDs, symbols$hgnc_symbol)
+symbols[annotatedix,]  ->  annotatedGenes
+tpms.mat.in$ensembl_gene_id <- annotatedGenes$ensembl_gene_id
+
+#Remove duplicated rows using:
+tpms.mat.in <- tpms.mat.in[!duplicated(tpms.mat.in$ensembl_gene_id),]  
+
+#Remove transcripts with no gene annotation using:
+tpms.mat.in <- na.omit(tpms.mat.in)
+
+#Set gene IDs as rownames and remove column:
+rownames(tpms.mat.in) <- tpms.mat.in$ensembl_gene_id
+tpms.mat.in$ensembl_gene_id <- NULL
+
+# Load required data objects
+nmf.res <- readRDS(file = "/home/raisaa/SeuratProject2/nmf.res.atrt.rds")
+
+# Load sample data as matrix object
+source(file = "/home/raisaa/Group3-4App-main/StarProtocols_Guide/R/Project_NMF.R")
+
+# Project NMF model to sequencing data
+tpms.mat <- project.NMF(input.array = as.matrix(tpms.mat.in), nmf.result = nmf.res)
+
+# Rows 3 in tpms.mat correspond to the ATRT metagene, extract them from the data and transpose matrix
+atrt.tpms <- t(tpms.mat[c(3),]) 
+
+# Apply logistic transformation to metagenes
+logistic.atrt.tpms <- apply(atrt.tpms,2,function(x){(1 / (1 + exp(-x)))}) 
+
+# Present output as data frame for export
+logistic.atrt.tpms <- as.data.frame(logistic.atrt.tpms)
+data.frame(logistic.atrt.tpms)
+
+# Projected results, map them back onto the seurat object
+logistic.atrt.tpms -> sc.data$logistic.atrt.tpms
+as.numeric(tpms.mat[3,]) -> sc.data$ATRT_metagene
+
+# Plot violin plots for each metagenes (cell.type)
+andersen_atrt_violinplot <- VlnPlot(sc.data, features = "ATRT_metagene", group.by = "cell.type") + theme(legend.position = "none")  
+andersen_dimplot <- DimPlot(object = sc.data, group.by = "cell.type")
+andersen_atrt_featureplot <- FeaturePlot(object = sc.data,  "ATRT_metagene", min.cutoff = 0.5)
+
+ggsave(andersen_atrt_featureplot, width=13, height=11, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Metagene projection/FP_Projection.png")
+ggsave(andersen_atrt_violinplot, width=13, height=11, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Metagene projection/VP_Projection.png")
+
+# Plot violin plots for each metagenes (specific.id)
+andersen_atrt_violinplot2 <- VlnPlot(sc.data, features = "ATRT_metagene", group.by = "specific.id") + theme(legend.position = "none")
+andersen_dimplot2 <- DimPlot(object = sc.data, group.by = "specific.id", label = T, label.size = 3)
+andersen_atrt_featureplot2 <- FeaturePlot(object = sc.data,  "ATRT_metagene", min.cutoff = 0.5, label=T)
+
+ggsave(andersen_atrt_featureplot2, width=13, height=11, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Metagene projection/2_FP_Projection.png")
+ggsave(andersen_dimplot2, width=13, height=11, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Basic Seurat/2_Dimplot.png")
+ggsave(andersen_atrt_violinplot2, width=13, height=11, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Metagene projection/2_VP_Projection.png")
+
+andersen_atrt_violinplot3 <- VlnPlot(sc.data, features = "ATRT_metagene", group.by = "seurat_clusters") + theme(legend.position = "none")
+
+#################### SUBGROUP PROJECTION ####################
+
+# Load required data objects
+nmf.res <- readRDS(file = "/home/raisaa/SeuratProject2/nmf.res.atrt.subgrp.rds")
+
+# Load sample data as matrix object
+source(file = "/home/raisaa/Group3-4App-main/StarProtocols_Guide/R/Project_NMF.R")
+
+# Project NMF model to sequencing data
+tpms.mat <- project.NMF(input.array = as.matrix(tpms.mat.in), nmf.result = nmf.res)
+
+# Rows 3 in tpms.mat correspond to the ATRT metagene, extract them from the data and transpose matrix
+atrt.tpms <- t(tpms.mat[c(1,2,3),]) 
+
+# Apply logistic transformation to metagenes
+logistic.atrt.tpms <- apply(atrt.tpms,2,function(x){(1 / (1 + exp(-x)))}) 
+
+# Present output as data frame for export
+logistic.atrt.tpms <- as.data.frame(logistic.atrt.tpms)
+data.frame(logistic.atrt.tpms)
+
+# Projected results, map them back onto the seurat object
+#logistic.atrt.tpms -> sc.data$logistic.atrt.tpms
+as.numeric(tpms.mat[3,]) -> sc.data$SHH_metagene
+as.numeric(tpms.mat[2,]) -> sc.data$MYC_metagene
+as.numeric(tpms.mat[1,]) -> sc.data$TYR_metagene
+
+# Plot violin plots for each metagenes (cell.type)
+Andersen_shh_violinplot <- VlnPlot(sc.data, features = "SHH_metagene", group.by = "cell.type") + theme(legend.position = "none")   
+Andersen_myc_violinplot <- VlnPlot(sc.data, features = "MYC_metagene", group.by = "cell.type") +  theme(legend.position = "none")  
+Andersen_tyr_violinplot <- VlnPlot(sc.data, features = "TYR_metagene", group.by = "cell.type") + theme(legend.position = "none")   
+
+Andersen_shh_featureplot <- FeaturePlot(object = sc.data, 
+                                     features = "SHH_metagene", 
+                                     cols = c("grey", "green"), 
+                                     max.cutoff = 1, min.cutoff = 0.6, label = T)
+Andersen_myc_featureplot <- FeaturePlot(object = sc.data, "MYC_metagene", cols = c("grey","yellow"), min.cutoff = 0.7, label = T)
+Andersen_tyr_featureplot <- FeaturePlot(object = sc.data, "TYR_metagene", cols = c("grey","red"),min.cutoff=0.7, label = T) 
+
+# Plot violin plots for each metagenes (specific.id)
+Andersen_shh_violinplot2 <- VlnPlot(sc.data, features = "SHH_metagene", group.by = "specific.id") + theme(legend.position = "none")   
+Andersen_myc_violinplot2 <- VlnPlot(sc.data, features = "MYC_metagene", group.by = "specific.id") +  theme(legend.position = "none")  
+Andersen_tyr_violinplot2 <- VlnPlot(sc.data, features = "TYR_metagene", group.by = "specific.id") + theme(legend.position = "none")   
+
+# Plot violin plots for each metagenes (clusters)
+Andersen_shh_violinplot3 <- VlnPlot(sc.data, features = "SHH_metagene", group.by = "seurat_clusters") + theme(legend.position = "none")   
+Andersen_myc_violinplot3 <- VlnPlot(sc.data, features = "MYC_metagene", group.by = "seurat_clusters") +  theme(legend.position = "none")  
+Andersen_tyr_violinplot3 <- VlnPlot(sc.data, features = "TYR_metagene", group.by = "seurat_clusters") + theme(legend.position = "none")   
+
+ggsave(Andersen_shh_violinplot, width = 13, height = 11, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Metagene projection/VP_shhProjection.png") 
+ggsave(Andersen_myc_violinplot, width = 13, height = 11, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Metagene projection/VP_mycProjection.png")
+ggsave(Andersen_tyr_violinplot, width = 13, height = 11, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Metagene projection/VP_tyrProjection.png")
+VP_All_Andersen <- plot_grid(andersen_atrt_violinplot,Andersen_shh_violinplot,Andersen_myc_violinplot,Andersen_tyr_violinplot, ncol=2, nrow=2) +theme(legend.position = "right")
+ggsave(VP_All_Andersen,  width = 14, height = 12, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Metagene projection/VP_All_Projection.png")
+
+ggsave(Andersen_shh_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Metagene projection/FP_shhProjection.png")
+ggsave(Andersen_myc_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Metagene projection/FP_mycProjection.png")
+ggsave(Andersen_tyr_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Metagene projection/FP_tyrProjection.png")
+FP_All_Andersen <- plot_grid(andersen_atrt_featureplot, Andersen_shh_featureplot,Andersen_myc_featureplot,Andersen_tyr_featureplot,andersen_dimplot, ncol=2, nrow=2) +theme(legend.position = "right")
+ggsave(FP_All_Andersen,  width = 14, height = 11, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Metagene projection/FP_All_Projection.png")
+
+ggsave(FP_All_Andersen+VP_All_Andersen, width = 23, height = 13, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Metagene projection/FP_VP_All_Projection.png")
+
+ggsave(Andersen_shh_violinplot2, width = 13, height = 11, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Metagene projection/2_VP_shhProjection.png") 
+ggsave(Andersen_myc_violinplot2, width = 13, height = 11, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Metagene projection/2_VP_mycProjection.png")
+ggsave(Andersen_tyr_violinplot2, width = 13, height = 11, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Metagene projection/2_VP_tyrProjection.png")
+VP_All_Andersen2 <- plot_grid(andersen_atrt_violinplot2,Andersen_shh_violinplot2,Andersen_myc_violinplot2,Andersen_tyr_violinplot2, ncol=2, nrow=2) +theme(legend.position = "right")
+ggsave(VP_All_Andersen2,  width = 14, height = 12, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Metagene projection/2_VP_All_Projection.png")
+FP_VP_All_Andersen2 <- plot_grid(FP_All_Andersen,VP_All_Andersen2, ncol = 2, rel_widths = c(1,2))
+ggsave(FP_VP_All_Andersen2, width = 28, height = 13, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Metagene projection/2_FP_VP_All_Projection.png")
+
+ggsave(Andersen_shh_violinplot3, width = 13, height = 11, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Metagene projection/3_VP_shhProjection.png") 
+ggsave(Andersen_myc_violinplot3, width = 13, height = 11, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Metagene projection/3_VP_mycProjection.png")
+ggsave(Andersen_tyr_violinplot3, width = 13, height = 11, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Metagene projection/3_VP_tyrProjection.png")
+VP_All_Andersen3 <- plot_grid(andersen_atrt_violinplot3,Andersen_shh_violinplot3,Andersen_myc_violinplot3,Andersen_tyr_violinplot3, ncol=2, nrow=2) +theme(legend.position = "right")
+ggsave(VP_All_Andersen3,  width = 14, height = 12, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Metagene projection/3_VP_All_Projection.png")
+
+dimplots <- plot_grid(p1,p1_2, nrow=1)
+fp_dimplots <- plot_grid(dimplots,FP_All_Andersen, nrow=1, rel_widths = c(1.6,1))
+vps <- plot_grid(VP_All_Andersen, VP_All_Andersen2, nrow=1, rel_widths = c(1,2))
+complete <- plot_grid(dimplots,FP_All_Andersen,VP_All_Andersen, VP_All_Andersen2, nrow=4)
+
+ggsave(fp_dimplots, width = 30, height = 16, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Metagene projection/COMPLETE_FPDIMPLOTS.png")
+ggsave(vps, width = 30, height = 14, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Metagene projection/COMPLETE_VPs.png")
+ggsave(complete, width = 14, height = 22, file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Metagene projection/COMPLETE.png")
+
+saveRDS(sc.data, file="~/SeuratProject2/ATRT_Andersen/sc.data.rds")
+
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(R.utils)
+library(monocle3)
+library(ggplot2)
+library(SeuratWrappers)
+
+# Convert Seurat object as cell data set (cds)
+cds_andersen <- as.cell_data_set(sc.data)
+
+cds_andersen@rowRanges@elementMetadata@listData[["gene_short_name"]] <- rownames(sc.data[["RNA"]])
+
+# Preprocess CDS data
+cds_andersen <- preprocess_cds(cds_andersen, num_dim = 5)
+
+# Align CDS data
+cds_andersen <- align_cds(cds_andersen)
+
+# Reduce data dimension
+cds_andersen <- reduce_dimension(cds_andersen)
+
+# Cluster cells
+cds_andersen <- cluster_cells(cds_andersen)
+
+# Plot before trajectory
+andersen.before.trajectory <- plot_cells(cds_andersen, show_trajectory_graph = FALSE,
+                                         color_cells_by = "specific.id", label_groups_by_cluster = TRUE, group_label_size = 2, force(T)) +
+  theme(legend.position = "right")
+
+ggsave(andersen.before.trajectory, height = 7, width = 9, 
+       file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Trajectory analysis/Andersen_Before_Trajectory.png")
+
+# See partition
+plot_cells(cds_andersen, color_cells_by = "partition")
+
+# Plot learn graph
+cds_andersen <- learn_graph(cds_andersen, use_partition = T)
+
+# Plot order graph
+cds_andersen <- order_cells(cds_andersen)
+
+# Plot clusters trajectory
+andersen.clusters.trajectory <- plot_cells(cds_andersen,
+                                           color_cells_by = "specific.id",
+                                           label_groups_by_cluster = FALSE,
+                                           label_branch_points = FALSE,
+                                           label_roots = FALSE,
+                                           label_leaves = FALSE,
+                                           group_label_size = 2,
+)  + theme(legend.position = "right")
+
+ggsave(andersen.clusters.trajectory, height = 7, width = 9, 
+       file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Trajectory analysis/Andersen_Trajectory.png")
+
+# Pseudotime
+andersen_Pseudotime_Trajectory <- plot_cells(cds_andersen,
+                                             color_cells_by = 'pseudotime',
+                                             label_groups_by_cluster = FALSE,
+                                             label_branch_points = FALSE,
+                                             label_roots = FALSE,
+                                             label_leaves = FALSE)
+
+ggsave(andersen_Pseudotime_Trajectory, height = 7, width = 9, 
+       file="~/SeuratProject/andersen data analysis/Trajectory Analysis using Monocle3/andersen_Pseudotime.png")
+
+# OPC/OLIGO LINEAGE
+# Create an object of chosen cell types
+opcoligo.lineage <- c("COP","Cyc_OPC",
+                     "MFOL","mGPC","MOL","NFOL","OPC")
+
+### subset the columns of this large seurat object to give only the cluster we want
+sc.data.opc.oligo <- sc.data[,sc.data$specific.id%in%opcoligo.lineage]
+
+# Convert Seurat object as cell data set (cds)
+cds_andersen_opcoligo <- as.cell_data_set(sc.data.opc.oligo)
+
+cds_andersen_opcoligo@rowRanges@elementMetadata@listData[["gene_short_name"]] <- rownames(sc.data[["RNA"]])
+
+# Preprocess CDS data
+cds_andersen_opcoligo <- preprocess_cds(cds_andersen_opcoligo, num_dim = 50)
+
+# Align CDS data
+cds_andersen_opcoligo <- align_cds(cds_andersen_opcoligo)
+
+# Reduce data dimension
+cds_andersen_opcoligo <- reduce_dimension(cds_andersen_opcoligo)
+
+# Cluster cells
+cds_andersen_opcoligo <- cluster_cells(cds_andersen_opcoligo)
+
+# Plot before trajectory
+andersen.before.trajectory.opcoligo <- plot_cells(cds_andersen_opcoligo, show_trajectory_graph = FALSE,
+                                         color_cells_by = "specific.id", label_groups_by_cluster = TRUE, group_label_size = 2, force(T)) +
+  theme(legend.position = "right")
+
+ggsave(andersen.before.trajectory.opcoligo, height = 7, width = 9, 
+       file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Trajectory analysis/Andersen_Before_Trajectory_OPCOLIGO.png")
+
+# See partition
+plot_cells(cds_andersen_opcoligo, color_cells_by = "partition")
+
+# Plot learn graph
+cds_andersen_opcoligo <- learn_graph(cds_andersen_opcoligo, use_partition = F)
+
+# Plot order graph
+cds_andersen_opcoligo <- order_cells(cds_andersen_opcoligo)
+
+# Plot clusters trajectory
+andersen.clusters.trajectory.opcoligo <- plot_cells(cds_andersen_opcoligo,
+                                           color_cells_by = "specific.id",
+                                           label_groups_by_cluster = FALSE,
+                                           label_branch_points = FALSE,
+                                           label_roots = FALSE,
+                                           label_leaves = FALSE,
+                                           group_label_size = 2,
+)  + theme(legend.position = "right")
+
+ggsave(andersen.clusters.trajectory.opcoligo, height = 7, width = 9, 
+       file="~/SeuratProject2/ATRT_Andersen/Andersen data analysis/Trajectory analysis/Andersen_Trajectory_OPCOLIGO.png")
+
+plot_cells(cds_andersen_opcoligo,
+           color_cells_by = "MYC_metagene",
+           label_cell_groups=FALSE,
+           label_leaves=FALSE,
+           label_branch_points=FALSE,
+           graph_label_size=1.5,
+           cell_stroke = 0.1,
+           scale_to_range = F, cell_size = 1, alpha = 0.1) + 
+  scale_colour_gradient2(
+    low = "white",
+    mid = "white",
+    high = "green",
+    midpoint = 0.1,
+    space = "Lab",
+    na.value = "grey50",
+    guide = "colourbar",
+    aesthetics = "colour"
+  ) 
+
+plot_cells(cds_andersen_opcoligo,
+           color_cells_by = "SHH_metagene",
+           label_cell_groups=FALSE,
+           label_leaves=FALSE,
+           label_branch_points=FALSE,
+           graph_label_size=1.5,
+           cell_stroke = 0.1,
+           scale_to_range = F, cell_size = 1, alpha = 0.1) + 
+  scale_colour_gradient2(
+    low = "white",
+    mid = "white",
+    high = "green",
+    midpoint = 0.1,
+    space = "Lab",
+    na.value = "grey50",
+    guide = "colourbar",
+    aesthetics = "colour"
+  ) 
+
+### FIND MARKERS FOR CLUSTERS ###
+DefaultAssay(sc.data)
+
+library(Seurat)
+library(tidyverse)
+
+FindAllMarkers(sc.data,
+               logfc.threshold = 0.25,
+               min.pct = 0.1,
+               only.pos = TRUE,
+               test.use = 'DESeq2',
+               slot = 'counts')
+
+allmarkers <- FindAllMarkers(sc.data, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+allmarkers %>%
+  group_by("seurat_clusters") %>%
+  slice_max(n = 30, order_by = avg_log2FC)
+
+allmarkers %>%
+  group_by("seurat_clusters") %>%
+  slice_max(n = 100, order_by = avg_log2FC) %>%
+  print(n = Inf)
+
+library(dplyr)
+
+sorted_markers <- allmarkers %>%
+  group_by("seurat_clusters") %>%
+  slice_max(n = 100, order_by = avg_log2FC) %>%
+  arrange("seurat_clusters")
+
+print(sorted_markers, n = Inf)
+
+# These are the clusters that TYR_metagene projected onto
+# Cluster 15 and 17
+cluster15.markers <- FindMarkers(sc.data, ident.1 = 15,min.pct = 0.5)
+head(cluster15.markers, n = 20)
+
+cluster17.markers <- FindMarkers(sc.data, ident.1 = 17, min.pct = 0.25)
+head(cluster17.markers, n = 20)
+
+# MYC_metagene
+cluster22.markers <- FindMarkers(sc.data, ident.1 = 22,min.pct = 0.5)
+head(cluster22.markers, n = 20)
+
+cluster23.markers <- FindMarkers(sc.data, ident.1 = 23, min.pct = 0.5)
+head(cluster23.markers, n = 20)
+
+cluster20.markers <- FindMarkers(sc.data, ident.1 = 20, min.pct = 0.5)
+head(cluster20.markers, n = 20)
+
+cluster11.markers <- FindMarkers(sc.data, ident.1 = 11, min.pct = 0.5)
+head(cluster11.markers, n = 20)
+
+cluster13.markers <- FindMarkers(sc.data, ident.1 = 13, min.pct = 0.5)
+head(cluster13.markers, n = 20)
+
+cluster18.markers <- FindMarkers(sc.data, ident.1 = 18, min.pct = 0.5)
+head(cluster18.markers, n = 20)
+
+cluster7.markers <- FindMarkers(sc.data, ident.1 = 7, min.pct = 0.5)
+head(cluster7.markers, n = 20)
+
+cluster1.markers <- FindMarkers(sc.data, ident.1 = 1, min.pct = 0.5)
+head(cluster1.markers, n = 20)
+
+# SHH metagene
+cluster10.markers <- FindMarkers(sc.data, ident.1 = 10, min.pct = 0.5)
+head(cluster10.markers, n = 20)
+
+cluster19.markers <- FindMarkers(sc.data, ident.1 = 19, min.pct = 0.5)
+head(cluster19.markers, n = 20)
+
+cluster6.markers <- FindMarkers(sc.data, ident.1 = 6, min.pct = 0.5)
+head(cluster6.markers, n = 20)
+
+cluster8.markers <- FindMarkers(sc.data, ident.1 = 8, min.pct = 0.5)
+head(cluster8.markers, n = 20)
+

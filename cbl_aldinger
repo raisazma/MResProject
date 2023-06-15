@@ -16,11 +16,11 @@ DefaultAssay(cbl) <- "RNA"
 cbl$percent.mt[is.na(cbl$percent.mt)] <- 0
 
 # Visualize QC metrics as a violin plot
-aldinger.qc.metrics <- VlnPlot(cbl, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+aldinger.qc.metrics <- VlnPlot(cbl, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, pt.size = 0)
 ggsave(aldinger.qc.metrics, height = 14, width = 21, file="~/SeuratProject/Aldinger data analysis/Basic Seurat/Aldinger_QC_Metrics.png")
 
 # Feature scatter to visualize feature-feature relationships
-plot1 <- FeatureScatter(cbl, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot1 <- FeatureScatter(cbl, feature1 = "nCount_RNA", feature2 = "percent.mt") + theme(legend.position = "none")
 plot2 <- FeatureScatter(cbl, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
 aldinger.feature.relationships <- plot1 + plot2
 ggsave(aldinger.feature.relationships, height = 14, width = 21, file="~/SeuratProject/Aldinger data analysis/Basic Seurat/Aldinger_nFeature_nCount.png")
@@ -94,10 +94,10 @@ ggsave(aldinger_umap, width = 23, height = 11, file="~/SeuratProject/Aldinger da
 
 ##### SAVE THE OBJECTS ######
 library(cowplot)
-grid_aldinger_qc <- plot_grid(aldinger.qc.metrics, aldinger.feature.relationships,plot1l,plot2l, labels=c("a","b","c"," "), nrow=2)
+grid_aldinger_qc <- plot_grid(aldinger.qc.metrics, aldinger.feature.relationships, labels=c("a","b"), nrow=1)
 ggsave(grid_aldinger_qc, height=12,width=27,file="~/SeuratProject/Aldinger data analysis/Basic Seurat/grid_aldinger_qc.png")
 
-grid_aldinger_dimreduct <- plot_grid(aldinger_vizdimloadings,aldinger_pca,aldinger_elbowplot,aldinger_umap,labels=c("a","b","c","d"),nrow=2, rel_widths = c(1,2))
+grid_aldinger_dimreduct <- plot_grid(aldinger_pca,aldinger_elbowplot,aldinger_umap,labels=c("a","b","c"),nrow=1)
 ggsave(grid_aldinger_dimreduct, height=12,width=24,file="~/SeuratProject/Aldinger data analysis/Basic Seurat/grid_aldinger_dimreduct.png")
 
 ############# NEW SUBSET ##############
@@ -110,6 +110,45 @@ cbl.clusters.of.interest <- c("02-RL","03-GCP","04-GN","05-eCN/UBC")
 ### subset the columns of this large seurat object to give only the cluster we want
 subset.cbl <- cbl[,cbl$figure_clusters%in%cbl.clusters.of.interest]
 
+# Set the default assay
+DefaultAssay(subset.cbl) <- "RNA"
+
+# Perform quality control (QC)
+subset.cbl$percent.mt[is.na(subset.cbl$percent.mt)] <- 0
+
+# Visualize QC metrics as a violin plot
+aldinger.subset.qc.metrics <- VlnPlot(subset.cbl, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), group.by = "figure_clusters", ncol=3, pt.size = 0)
+aldinger.subset.qc.metrics1 <- VlnPlot(subset.cbl, features = c("nFeature_RNA"), group.by = "figure_clusters", pt.size = 0) + theme(legend.position = "none")
+aldinger.subset.qc.metrics2 <- VlnPlot(subset.cbl, features = c("nCount_RNA"), group.by = "figure_clusters", pt.size = 0) + theme(legend.position = "none")
+aldinger.subset.qc.metrics3 <- VlnPlot(subset.cbl, features = c("percent.mt"), group.by = "figure_clusters", pt.size = 0) +
+  theme(
+    legend.text = element_text(size = 20)
+  )
+
+ggsave(aldinger.subset.qc.metrics, height = 13, width = 19, file="~/SeuratProject/Aldinger data analysis/Subset/Aldinger_Subset_QC_Metrics.png")
+
+# Feature scatter to visualize feature-feature relationships
+plot1 <- FeatureScatter(subset.cbl, feature1 = "nCount_RNA", feature2 = "percent.mt", group.by = "figure_clusters") + theme(legend.position = "none")
+plot2 <- FeatureScatter(subset.cbl, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", group.by = "figure_clusters") +
+  theme(legend.text = element_text(size = 20))
+aldinger.subset.feature.relationships <- plot1 + plot2
+ggsave(aldinger.subset.feature.relationships, height = 14, width = 21, file="~/SeuratProject/Aldinger data analysis/Subset/Aldinger_nFeature_nCount.png")
+
+# Set cutoff parameters
+subset.cbl <- subset(subset.cbl, subset = nFeature_RNA > 200 & nFeature_RNA < 2500 & percent.mt < 10)
+
+# Normalise data
+subset.cbl <- NormalizeData(subset.cbl)
+
+# Find highly variable features
+subset.cbl <- FindVariableFeatures(subset.cbl, selection.method = "vst", nfeatures = 2000)
+
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(subset.cbl), 10)
+
+# Scale data prior to performing dimensionality reduction
+subset.cbl <- ScaleData(subset.cbl)
+
 # Examine PCA for the new subset
 subset.cbl <- RunPCA(subset.cbl, features = VariableFeatures(object = subset.cbl))
 print(subset.cbl[["pca"]], dims = 1:5, nfeatures = 5)
@@ -118,7 +157,11 @@ print(subset.cbl[["pca"]], dims = 1:5, nfeatures = 5)
 aldinger_subset_vizdimloadings <- VizDimLoadings(subset.cbl, dims = 1:2, reduction = "pca")
 ggsave(aldinger_subset_vizdimloadings, width=9, height=9, file="~/SeuratProject/Aldinger data analysis/Subset/Aldinger_Subset_Vizdimloadings.png")
 
-aldinger_subset_pca_dimplot <- DimPlot(subset.cbl, reduction = "pca", group.by = "figure_clusters")
+aldinger_subset_pca_dimplot <- DimPlot(subset.cbl, reduction = "pca", group.by = "figure_clusters") +
+  theme(
+    legend.text = element_text(size = 20)
+  )
+
 ggsave(aldinger_subset_pca_dimplot, width=9,height=9,file="~/SeuratProject/Aldinger data analysis/Subset/Aldinger_Subset_PCA_Dimplot.png")
 
 aldinger_subset_heatmap <- DimHeatmap(subset.cbl, dims = 1:9, cells = 500, balanced = TRUE)
@@ -135,16 +178,27 @@ ggsave(aldinger_elbowplot, width=9, height=9, file="~/SeuratProject/Aldinger dat
 subset.cbl <- JackStraw(subset.cbl, num.replicate = 100)
 subset.cbl <- ScoreJackStraw(subset.cbl, dims = 1:20)
 
+### make a new clustering and directly compare your clustering with the Lu paper clustering
+subset.cbl <- FindNeighbors(subset.cbl, dims = 1:15)
+subset.cbl <- FindClusters(subset.cbl, resolution = 0.5)
+
 #### Recalculate the UMAP with the subset and also recalculate the clusters and the PCA and the variable genes...
 
 subset.cbl <- RunUMAP(subset.cbl, dims = 1:10)
 Aldinger_subset_umap_dimplot <- DimPlot(subset.cbl, reduction = "umap", label = TRUE, group.by = "figure_clusters")
 ggsave(Aldinger_subset_umap_dimplot, height = 9, width = 12, file="~/SeuratProject/Aldinger data analysis/Subset/Aldinger_Subset_UMAP.png")
 
-p1 <- DimPlot(subset.cbl, reduction = "umap", group.by = "figure_clusters")
-p2 <- DimPlot(subset.cbl, reduction = "umap", group.by="seurat_clusters")
+p1 <- DimPlot(subset.cbl, reduction = "umap", group.by = "figure_clusters", label = T, label.size = 6) +
+  theme(
+    legend.text = element_text(size = 20)
+  )
+p2 <- DimPlot(subset.cbl, reduction = "umap", group.by="seurat_clusters", label = T, label.size = 6) +
+  theme(
+    legend.text = element_text(size = 20)
+  )
+
 Aldinger_subset_umap_dimplot <- p1+p2
-ggsave(Aldinger_subset_umap_dimplot, width = 23, height = 11, file="~/SeuratProject/Aldinger data analysis/Subset/Aldinger_UMAP.png")
+ggsave(Aldinger_subset_umap_dimplot, width = 23, height = 11, file="~/SeuratProject/Aldinger data analysis/Subset/Aldinger_Subset_UMAP.png")
 
 # Find variable features
 subset.cbl <- FindVariableFeatures(subset.cbl, selection.method = "vst", nfeatures = 2000)
@@ -158,18 +212,25 @@ plot2l <- LabelPoints(plot = plot1, points = top10, repel = TRUE, xnudge = 0, yn
 plot1plot2  <- plot_grid(plot1,plot2, nrow=1)
 ggsave(plot1+plot2, height = 10, width = 14, file="~/SeuratProject/Aldinger data analysis/Basic Seurat/Aldinger_VariableFeatures.png") + theme_bw()
 
-### make a new clustering and directly compare your clustering with the Lu paper clustering
-subset.cbl <- FindNeighbors(subset.cbl, dims = 1:15)
-subset.cbl <- FindClusters(subset.cbl, resolution = 0.5)
-View(subset.cbl)
-
 ##### Ident(subset.cbl) will be the new clustering that you made
 View(subset.cbl$figure_clusters)
 head(Idents(subset.cbl), 5)
 
 ##### SAVE ALL OBJECTS ######
-grid_aldinger_subset_dimreduct <- plot_grid(aldinger_subset_vizdimloadings,aldinger_subset_pca_dimplot,aldinger_elbowplot,Aldinger_subset_umap_dimplot,labels=c("a","b","c","d"),nrow=2, rel_widths = c(1,2))
-ggsave(grid_aldinger_subset_dimreduct, height=12,width=24,file="~/SeuratProject/Aldinger data analysis/Subset/grid_aldinger_subset_dimreduct.png")
+library(cowplot)
+grid_aldinger_subset_qcmetrics <- plot_grid(aldinger.subset.qc.metrics1, aldinger.subset.qc.metrics2, aldinger.subset.qc.metrics3,labels=c("a"," "," "), nrow=1)
+
+grid_aldinger_subset_dimreduct <- plot_grid(aldinger_elbowplot, aldinger_subset_pca_dimplot, labels=c("c","d"), nrow=1) 
+
+grid_aldinger_subset_dimreduct2 <- plot_grid(p1,p2,labels=c("e","f"),nrow=1)
+
+ggsave(grid_aldinger_subset_dimreduct, height=12,width=20,file="~/SeuratProject/Aldinger data analysis/Subset/grid_aldinger_subset_dimreduct.png")
+
+grid_all_aldinger_subset <- plot_grid(grid_aldinger_subset_qcmetrics, aldinger.subset.feature.relationships, grid_aldinger_subset_dimreduct, grid_aldinger_subset_dimreduct2, labels=c(" ","b"," "," "),nrow = 4)
+
+ggsave(grid_all_aldinger_subset, height=30, width=20, file="~/SeuratProject/Aldinger data analysis/Subset/grid_all_aldinger_subset.png")
+
+saveRDS(subset.cbl, file = "~/SeuratProject/Aldinger data analysis/Subset/subset.cbl.rds")
 
 ### subset.cbl$figure_clusters is the name of there clustering
 ### you can use the function table(a,b) to create a comparison table
@@ -238,22 +299,37 @@ as.numeric(tpms.mat[4,]) -> subset.cbl$shh_metagene
 as.numeric(tpms.mat[2,]) -> subset.cbl$wnt_metagene
 logistic.g3g4.tpms.continuum.score -> subset.cbl$g3g4.score
 
-aldinger_gr4_violinplot_cluster.names <- VlnPlot(subset.cbl, features = "group4_metagene", group.by = "figure_clusters")
-aldinger_gr3_violinplot_cluster.names <- VlnPlot(subset.cbl, features = "group3_metagene" ,group.by = "figure_clusters")
-aldinger_shh_violinplot_cluster.names <- VlnPlot(subset.cbl, features = "shh_metagene" ,group.by = "figure_clusters")
-aldinger_wnt_violinplot_cluster.names <- VlnPlot(subset.cbl, features = "wnt_metagene" ,group.by = "figure_clusters")
-aldinger_wnt_violinplot <- VlnPlot(subset.cbl, features = "wnt_metagene")
-aldinger_shh_violinplot <- VlnPlot(subset.cbl, features = "shh_metagene")
-aldinger_gr3_violinplot <- VlnPlot(subset.cbl, features = "group3_metagene")
-aldinger_gr4_violinplot <- VlnPlot(subset.cbl, features = "group4_metagene")
+library(patchwork)
+library(cowplot)
 
-ggsave(aldinger_gr4_violinplot_cluster.names, width = 10, height = 11, file="~/SeuratProject/Aldinger data analysis/Metagene projection/Aldinger_Group4Projection_VP.png")
-ggsave(aldinger_gr3_violinplot_cluster.names, width = 10, height = 11, file="~/SeuratProject/Aldinger data analysis/Metagene projection/Aldinger_Group3Projection_VP.png")
-ggsave(aldinger_shh_violinplot_cluster.names, width = 10, height = 11, file="~/SeuratProject/Aldinger data analysis/Metagene projection/Aldinger_ShhProjection_VP.png")
-ggsave(aldinger_wnt_violinplot_cluster.names, width = 10, height = 11, file="~/SeuratProject/Aldinger data analysis/Metagene projection/Aldinger_WntProjection_VP.png")
+# Generate the individual violin plots
+aldinger_gr4_violinplot_cluster.names <- VlnPlot(subset.cbl, features = "group4_metagene", group.by = "figure_clusters", pt.size = 0)
+aldinger_gr3_violinplot_cluster.names <- VlnPlot(subset.cbl, features = "group3_metagene", group.by = "figure_clusters", pt.size = 0)
+aldinger_shh_violinplot_cluster.names <- VlnPlot(subset.cbl, features = "shh_metagene", group.by = "figure_clusters", pt.size = 0)
+aldinger_wnt_violinplot_cluster.names <- VlnPlot(subset.cbl, features = "wnt_metagene", group.by = "figure_clusters", pt.size = 0)
 
-grid_aldinger_vp_projection <- plot_grid(aldinger_gr3_violinplot_cluster.names,aldinger_gr4_violinplot_cluster.names,
-                                         aldinger_shh_violinplot_cluster.names,aldinger_wnt_violinplot_cluster.names, labels=c("f", "g","h","i"), ncol = 2, nrow = 2)
+# Create a common legend
+legend <- get_legend(aldinger_gr4_violinplot_cluster.names)
+
+# Remove legends from individual plots
+aldinger_gr4_violinplot_cluster.names <- aldinger_gr4_violinplot_cluster.names + theme(legend.position = "none") 
+aldinger_gr3_violinplot_cluster.names <- aldinger_gr3_violinplot_cluster.names + theme(legend.position = "none")
+aldinger_shh_violinplot_cluster.names <- aldinger_shh_violinplot_cluster.names + theme(legend.position = "none")
+aldinger_wnt_violinplot_cluster.names <- aldinger_wnt_violinplot_cluster.names + theme(legend.position = "none")
+
+# Combine the plots into a single plot grid
+grid_aldinger_vp_projection <- plot_grid(
+  aldinger_gr3_violinplot_cluster.names, aldinger_gr4_violinplot_cluster.names,
+  aldinger_shh_violinplot_cluster.names, aldinger_wnt_violinplot_cluster.names,
+  labels = c("f", "g", "h", "i"), ncol = 2, nrow = 2
+)
+
+# Add the legend to the plot grid
+grid_aldinger_vp_projection_with_legend <- plot_grid(
+  grid_aldinger_vp_projection, legend,
+  rel_widths = c(1, 0.15), align = "hv", axis = "lr"
+) 
+
 ggsave(grid_aldinger_vp_projection, height = 12, width = 16, 
        file="~/SeuratProject/Aldinger data analysis/Metagene projection/Grid_VP_Projection.png") 
 
@@ -264,7 +340,23 @@ aldinger_gr3_featureplot <- FeaturePlot(object = subset.cbl, "group3_metagene", 
 aldinger_shh_featureplot <- FeaturePlot(object = subset.cbl, "shh_metagene", cols = c("grey","red"),min.cutoff=0) 
 aldinger_wnt_featureplot <- FeaturePlot(object = subset.cbl, "wnt_metagene", cols = c("grey","blue"), min.cutoff=0)
 
-library(cowplot)
+# Increase the size of the legend
+aldinger.dimplot.figure.clusters <- DimPlot(object = subset.cbl, group.by = "figure_clusters") +theme(
+  legend.text = element_text(size = 20)
+)
+
+aldinger_gr4_featureplot <- FeaturePlot(object = subset.cbl, "group4_metagene", cols = c("grey", "green"), min.cutoff = 0) +
+  guides(fill = guide_legend(override.aes = list(size = legend_size)))
+
+aldinger_gr3_featureplot <- FeaturePlot(object = subset.cbl, "group3_metagene", cols = c("grey", "yellow"), min.cutoff = 0) +
+  guides(fill = guide_legend(override.aes = list(size = legend_size)))
+
+aldinger_shh_featureplot <- FeaturePlot(object = subset.cbl, "shh_metagene", cols = c("grey", "red"), min.cutoff = 0) +
+  guides(fill = guide_legend(override.aes = list(size = legend_size)))
+
+aldinger_wnt_featureplot <- FeaturePlot(object = subset.cbl, "wnt_metagene", cols = c("grey", "blue"), min.cutoff = 0) +
+  guides(fill = guide_legend(override.aes = list(size = legend_size)))
+
 plot_grid(aldinger_gr3_featureplot,
           aldinger_gr4_featureplot,
           aldinger_shh_featureplot,
@@ -283,7 +375,6 @@ ggsave(aldinger.dimplot.all, height = 14, width = 12,
        file="~/SeuratProject/Aldinger data analysis/Metagene projection/Grid_Aldinger_Projection.png") 
 
 ggsave(final.aldinger.dimplot.all, height=14,width=22,file="~/SeuratProject/Aldinger data analysis/Metagene projection/Grid_Aldinger_Projection.VPFP.png")
-
 ggsave(aldinger_gr4_featureplot, width = 10, height = 11, file="~/SeuratProject/Aldinger data analysis/Metagene projection/Aldinger_Group4Projection_FP.png")
 ggsave(aldinger_gr3_featureplot, width = 10, height = 11, file="~/SeuratProject/Aldinger data analysis/Metagene projection/Aldinger_Group3Projection_FP.png")
 ggsave(aldinger_shh_featureplot, width = 10, height = 11, file="~/SeuratProject/Aldinger data analysis/Metagene projection/Aldinger_ShhProjection_FP.png")
@@ -373,17 +464,6 @@ Aldinger_Pseudotime_Trajectory <- plot_cells(cds_aldinger,
 ggsave(Aldinger_Pseudotime_Trajectory, height = 7, width = 9, 
        file="~/SeuratProject/Aldinger data analysis/Trajectory Analysis using Monocle3/Aldinger_Pseudotime.png")
 
-# find genes that change in function of pseudotime
-deg_aldinger<- graph_test(cds_aldinger, neighbor_graph = 'principal_graph', cores = 4)
-
-deg_aldinger %>% 
-  arrange(q_value) %>% 
-  filter(status == 'OK') %>% 
-  head()
-
-genes <- c('MT-RNR2', 'LSAMP', 'DSCAML1')
-plot_cells(cds_aldinger,genes=genes,label_cell_groups=FALSE,show_trajectory_graph=FALSE)
-
 # plot_cells to visualize marker genes expression
 # 02-RL marker genes
     # from the top 10 RL markers, only RSPO3 and DPYD are highest in both RL and eCNs/UBCs. the rest are confined to RL only 
@@ -391,11 +471,19 @@ plot_cells(cds_aldinger,genes=genes,label_cell_groups=FALSE,show_trajectory_grap
         # aldinger said as RL differentiate to eCNs/ UBCs, their gene expression decline, not sure if true
 aldinger.02RL.genes <- c("RSPO1", "WNT2B", "OLIG3", "SLFN13", "CALCB", "CALCA","ATP6V1C2","RSPO3","DPYD","NEUROG1",
                          "OTX2","MKI67","LMX1A","EOMES","PAX6","WLS")
-aldinger.02RL.genes.only <- c("RSPO1", "WNT2B", "OLIG3", "SLFN13", "CALCB", "CALCA","ATP6V1C2","NEUROG1")
+aldinger.02RL.genes.only <- c("LMX1A", "EOMES", "PAX6", "WLS", "MKI67", "OTX2")
 aldinger_02RL_genes <- plot_cells(cds_aldinger,genes=aldinger.02RL.genes,label_cell_groups=FALSE,show_trajectory_graph=FALSE)
 aldinger_02RL_genes_only <- plot_cells(cds_aldinger,genes=aldinger.02RL.genes.only,label_cell_groups=FALSE,show_trajectory_graph=FALSE)
 
-ggsave(aldinger_02RL_genes, height = 7, width = 9, 
+# Set the plot title
+plot_title <- "RL gene markers"
+
+# Add the title to the plot
+plotrl <- aldinger_02RL_genes_only +
+  ggtitle(plot_title) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+ggsave(plotrl, height = 7, width = 9, 
        file="~/SeuratProject/Aldinger data analysis/Trajectory Analysis using Monocle3/MarkerGenes_02RL.png")
 ggsave(aldinger_02RL_genes_only, height = 7, width = 9, 
        file="~/SeuratProject/Aldinger data analysis/Trajectory Analysis using Monocle3/MarkerGenes_02RL_Only.png")
@@ -407,23 +495,41 @@ ggsave(aldinger_02RL_genes_only, height = 7, width = 9,
     #as GCP -> GN, MKI67 and DCC in GCP declines, with an increase of RELN and RBFOX3.
 aldinger.03GCP.genes <- c("PAX6","RBFOX3","PTPRK","MKI67","DCC","RELN")
 aldinger_03GCP_genes <- plot_cells(cds_aldinger,genes=aldinger.03GCP.genes,label_cell_groups=FALSE,show_trajectory_graph=FALSE)
+# Set the plot title
+plot_title <- "GCP gene markers"
 
-ggsave(aldinger_03GCP_genes, height = 7, width = 9, 
+# Add the title to the plot
+plotgcp <- aldinger_03GCP_genes +
+  ggtitle(plot_title) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+ggsave(plotgcp, height = 7, width = 9, 
        file="~/SeuratProject/Aldinger data analysis/Trajectory Analysis using Monocle3/MarkerGenes_03GCP.png")
 
 # 04-GN marker genes. *DOES NOT EXPRESS MKI67*
 aldinger.04GN.genes <- c("RBFOX3","PTPRK","RELN","MKI67")
 aldinger_04GN_genes <- plot_cells(cds_aldinger,genes=aldinger.04GN.genes,label_cell_groups=FALSE,show_trajectory_graph=FALSE)
+# Set the plot title
+plot_title <- "GN gene markers"
 
-ggsave(aldinger_04GN_genes, height = 7, width = 9, 
+# Add the title to the plot
+plotgn <- aldinger_04GN_genes +
+  ggtitle(plot_title) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+ggsave(plotgn, height = 7, width = 9, 
        file="~/SeuratProject/Aldinger data analysis/Trajectory Analysis using Monocle3/MarkerGenes_04GN.png")
 
 # 05-eCN-UBC *DOES NOT EXPRESS MKI67*
   # eCNs express LMX1A but not EOMES, UBCs express both LMX1A and EOMES. Aldingers paper was unable to discriminate eCNs and UBCs.
 aldinger.05eCNUBC.genes <- c("PAX6", "LMX1A","EOMES","MKI67")
 aldinger_05eCNUBC_genes <- plot_cells(cds_aldinger,genes=aldinger.05eCNUBC.genes,label_cell_groups=FALSE,show_trajectory_graph=FALSE)
+# Set the plot title
+plot_title <- "eCN/UBC gene markers"
 
-ggsave(aldinger_05eCNUBC_genes, height = 7, width = 9, 
+# Add the title to the plot
+plotecnubc <- aldinger_05eCNUBC_genes +
+  ggtitle(plot_title) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+ggsave(plotecnubc, height = 7, width = 9, 
        file="~/SeuratProject/Aldinger data analysis/Trajectory Analysis using Monocle3/MarkerGenes_05eCNUBC.png")
 
 # Save the final plots 
@@ -432,11 +538,15 @@ grid_aldinger_trajectory <- plot_grid(aldinger.clusters.trajectory,Aldinger_Pseu
 ggsave(grid_aldinger_trajectory, height = 6, width = 16, 
        file="~/SeuratProject/Aldinger data analysis/Trajectory Analysis using Monocle3/Grid_Aldinger_Trajectory.png") 
 
-grid_aldinger_trajectory_markers <- plot_grid(aldinger_02RL_genes, aldinger_03GCP_genes, aldinger_04GN_genes, aldinger_05eCNUBC_genes, labels=c("c", "d","e","f"), ncol = 2, nrow = 2)
+grid_aldinger_trajectory_markers <- plot_grid(plotrl, plotgcp, plotgn, plotecnubc, labels=c("c", "d","e","f"), ncol = 2, nrow = 2, rel_heights = c(2,1.5))
 ggsave(grid_aldinger_trajectory_markers, height = 10, width = 14, 
+       file="~/SeuratProject/Aldinger data analysis/Trajectory Analysis using Monocle3/Aldinger_Trajectory_Markers.png") 
+
+final <- plot_grid(plotrl, plotgcp, plotgn, plotecnubc, labels = c("a","b","c","d"), nrow = 2, rel_heights = c(1.1,1))
+ggsave(final, height = 10, width = 12, 
        file="~/SeuratProject/Aldinger data analysis/Trajectory Analysis using Monocle3/Grid_Aldinger_Trajectory_Markers.png") 
 
-grid_aldinger_trajectory_all <- plot_grid(grid_aldinger_trajectory,grid_aldinger_trajectory_markers,labels = c(" "," "),nrow=2,rel_heights=c(1,2))
+grid_aldinger_trajectory_all <- plot_grid(grid_aldinger_trajectory,grid_aldinger_all_trajectory_markers,labels = c(" "," "),nrow=2,rel_widths =c(1,2))
 ggsave(grid_aldinger_trajectory_all, height = 12, width = 13, 
        file="~/SeuratProject/Aldinger data analysis/Trajectory Analysis using Monocle3/Grid_Aldinger_Trajectory_ALL.png") 
 
@@ -458,7 +568,13 @@ meta.g4 <- plot_cells(cds_aldinger,
     na.value = "grey50",
     guide = "colourbar",
     aesthetics = "colour"
-  )
+  ) 
+plot_title <- "g4_metagene"
+
+# Add the title to the plot
+plotg4 <- meta.g4 +
+  ggtitle(plot_title) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
 
 meta.g3 <- plot_cells(cds_aldinger,
                       color_cells_by = "group3_metagene",
@@ -479,6 +595,13 @@ meta.g3 <- plot_cells(cds_aldinger,
     aesthetics = "colour"
   )
 
+plot_title <- "g3_metagene"
+
+# Add the title to the plot
+plotg3 <- meta.g3 +
+  ggtitle(plot_title) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
 meta.shh <- plot_cells(cds_aldinger,
                        color_cells_by = "shh_metagene",
                        label_cell_groups=FALSE,
@@ -498,6 +621,13 @@ meta.shh <- plot_cells(cds_aldinger,
     aesthetics = "colour"
   )
 
+plot_title <- "shh_metagene"
+
+# Add the title to the plot
+plotshh <- meta.shh +
+  ggtitle(plot_title) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
 meta.wnt <- plot_cells(cds_aldinger,
                        color_cells_by = "wnt_metagene",
                        label_cell_groups=FALSE,
@@ -515,10 +645,19 @@ meta.wnt <- plot_cells(cds_aldinger,
     na.value = "grey50",
     guide = "colourbar",
     aesthetics = "colour"
-  )
+  ) 
 
-metagenes <- plot_grid(meta.g3,meta.g4,meta.shh,meta.wnt, labels=c("j", "k","l","m"), ncol = 2, nrow = 2)
+plot_title <- "wnt_metagene"
+
+# Add the title to the plot
+plotwnt <- meta.wnt +
+  ggtitle(plot_title) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+metagenes <- plot_grid(plotg3,plotg4,plotshh,plotwnt, labels=c("j", "k","l","m"), ncol = 2, nrow = 2)
+ggsave(metagenes, height=14,width=22,file="~/SeuratProject/Aldinger data analysis/Trajectory Analysis using Monocle3/Grid_Aldinger_Trajectory_Metagene.png")
+
 all_projection <- plot_grid(final.aldinger.dimplot.all,metagenes, labels = F, ncol = 2, nrow = 1, rel_widths = c(1.2,1))
 
-ggsave(all_projection, height=15,width=33,file="~/SeuratProject/Aldinger data analysis/Metagene projection/Grid_Aldinger_Projection_And_Trajectory.VPFP.png")
+ggsave(all_projection, height=16,width=32,file="~/SeuratProject/Aldinger data analysis/Metagene projection/Grid_Aldinger_Projection_And_Trajectory.VPFP.png")
 

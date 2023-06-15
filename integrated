@@ -1,98 +1,91 @@
 library(Seurat)
+library(ggplot2)
 
-#### some objects????? save them somewhere
-subset.cbl <- readRDS(file = "~/SeuratProject/subset.cbl.rds")
-subset.cerebellum.data <- readRDS(file = "~/SeuratProject/subset.cerebellum.rds")
-"~/SeuratProject/seurat_integrated.sct"
-### remove
-#DefaultAssay(subset.cbl) <- "RNA"
+# Load objects
+subset.cbl <- readRDS("home/raisaa/SeuratProject/Aldinger data analysis/Subset/subset.cbl.rds")
+subset.cerebellum.data <- readRDS("home/raisaa/SeuratProject/Lu data analysis/subset.cerebellum.data.rds")
 
-subset.cerebellum.data@meta.data[, "protocol"] <- "lu.data"
-subset.cbl@meta.data[, "protocol"] <- "aldinger.data"
+  # This is the saved final integrated object
+seurat_integrated.sct <- readRDS("~/SeuratProject/Integrated data/seurat_integrated.sct.rds")
 
+subset.cerebellum.data@meta.data[, "protocol"] <- "lu"
+subset.cbl@meta.data[, "protocol"] <- "aldinger"
+
+# Set up list, including both Aldinger and Lu data
 data_list <- list()
 data_list[["aldinger"]] <- subset.cbl
 data_list[["lu"]] <- subset.cerebellum.data
 
-### once they are in the list we don't need the objects in the memory
+# Remove once objects are in the list 
 rm(subset.cbl)
 rm(subset.cerebellum.data)
-seurat_integrated.sct <- readRDS("~/SeuratProject/seurat_integrated.sct")
 
-# data_list <- lapply(X = data_list, FUN = function(x) {
-#   x <- NormalizeData(x)
-#   x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 2000)
-# })
-
-### lets try an sctransform this time
+# Apply SCTransform
 data_list <- lapply(X = data_list, FUN = SCTransform)
 
-#data_list[[1]] <- ScaleData(data_list[[1]])
-#data_list[[1]] <- RunPCA(data_list[[1]], npcs = 30)
-
-#data_list[[2]] <- ScaleData(data_list[[2]])
-#data_list[[2]] <- RunPCA(data_list[[2]], npcs = 30)
-
+# Select features that are repeatedly variable across datasets for integration
 features <- SelectIntegrationFeatures(object.list = data_list, nfeatures = 3000)
 data_list <- PrepSCTIntegration(object.list = data_list, anchor.features = features)
 
-### I have blanked out the rpca version
-#data_anchors <- FindIntegrationAnchors(object.list = data_list, anchor.features = features, reduction = "rpca")
-#seurat_integrated  <- IntegrateData(anchorset = data_anchors, dims = 1:30)
-
+# Identify anchors using the FindIntegrationAnchors() function, use these anchors to integrate the datasets together with IntegrateData().
 data_anchors <- FindIntegrationAnchors(object.list = data_list, normalization.method = "SCT", anchor.features = features)
 seurat_integrated.sct <- IntegrateData(anchorset = data_anchors, normalization.method = "SCT")
+rm(data_anchors)
+rm(data_list)
 
-# ## set the assay to RNA and visualize the datasets before integration
-# DefaultAssay(seurat_integrated) <- "RNA"
-# 
-# seurat_integrated <- NormalizeData(seurat_integrated, verbose = F)
-# seurat_integrated <- FindVariableFeatures(seurat_integrated, selection.method = "vst", nfeatures = 2000, verbose = F)
-# seurat_integrated <- ScaleData(seurat_integrated, verbose = F)
-# seurat_integrated <- RunPCA(seurat_integrated, npcs = 30, verbose = F)
-# seurat_integrated <- RunUMAP(seurat_integrated, reduction = "pca", dims = 1:30, verbose = F)
-# 
-# # UMAP plot of the datasets before integration
-# DimPlot(seurat_integrated,reduction = "umap")
-# DimPlot(seurat_integrated,reduction = "umap", group.by = "orig.ident")
-
-# integrated
+# Specify that we will perform downstream analysis on the corrected data
 DefaultAssay(seurat_integrated.sct) <- "integrated"
-# seurat_integrated <- ScaleData(seurat_integrated, verbose = F)
+
+# Run the standard workflow for visualization and clustering
 seurat_integrated.sct <- RunPCA(seurat_integrated.sct, npcs = 30, verbose = F)
 seurat_integrated.sct <- RunUMAP(seurat_integrated.sct, reduction = "pca", dims = 1:30, verbose = F)
 seurat_integrated.sct <- RunTSNE(seurat_integrated.sct, dims = 1:30)
 
-# plot integrated UMAP
-p1 <- DimPlot(seurat_integrated.sct, reduction = "umap")
+seurat_integrated.sct <- saveRDS(seurat_integrated.sct, file="~/SeuratProject/Integrated data/seurat_integrated.sct.rds")
+seurat_integrated.sct <- readRDS(file="~/SeuratProject/Integrated data/seurat_integrated.sct.rds")
+
+# Plot integrated UMAP
+p1 <- DimPlot(seurat_integrated.sct, reduction = "umap", label = T)
 plot(p1)
 
-# plot integrated relationship to aldinger
-p2 <- DimPlot(seurat_integrated.sct, reduction = "umap", group.by = "figure_clusters") 
+# Plot integrated relationship to Aldinger
+p2 <- DimPlot(seurat_integrated.sct, reduction = "umap", split.by = "protocol", label = T)
 plot(p2)
 
-# plot integrated relationship to lu
-p3 <- DimPlot(seurat_integrated.sct, group.by = "cluster.names")
+# Plot integrated relationship to lu
+p3 <- DimPlot(seurat_integrated.sct, reduction = "umap", group.by = "cluster.names")
 plot(p3)
 
-# plot the splitted UMAP to make the comparison easier
-p4 <- DimPlot(seurat_integrated.sct, reduction = "umap", split.by = "protocol", label = T)
+# Plot the splitted UMAP to make the comparison easier
+p4 <- DimPlot(seurat_integrated.sct, reduction = "umap", group.by = "figure_clusters")
 plot(p4)
 
 p1+p2+p3+p4
 
-# plot TSNE
+ggsave(p1, file="~/SeuratProject/Integrated data/dimplot1.png")
+ggsave(p2, file="~/SeuratProject/Integrated data/dimplot2_figure_clusters.png")
+ggsave(p3, file="~/SeuratProject/Integrated data/dimplot3_cluster.names.png")
+ggsave(p4, file="~/SeuratProject/Integrated data/dimplot4_protocol.png")
+
+library(cowplot)
+grid_integrated_dimplot <- plot_grid(p1,p2,p3,p4, labels=c("a","b","c","d"),nrow = 2)
+ggsave(grid_integrated_dimplot, height=15, width=20,file="~/SeuratProject/Integrated data/grid_integrated_dimplot.png")
+
+# Plot TSNE
 tsne1 <- DimPlot(seurat_integrated.sct, reduction = "tsne", label = TRUE, group.by = "protocol")
-tsne2 <- DimPlot(seurat_integrated.sct, reduction = "tsne", label = TRUE, group.by = "figure_clusters")
+tsne2 <- DimPlot(seurat_integrated.sct, reduction = "tsne", label = TRUE)
 tsne3 <- DimPlot(seurat_integrated.sct, reduction = "tsne", label = TRUE, group.by = "cluster.names")
-tsne4 <- DimPlot(seurat_integrated.sct, reduction = "tsne", label = TRUE)
+tsne4 <- DimPlot(seurat_integrated.sct, reduction = "tsne", label = TRUE, group.by = "figure_clusters")
+ggsave(tsne1, file="~/SeuratProject/Integrated data/tsne1_protocol.png")
+ggsave(tsne2, file="~/SeuratProject/Integrated data/tsne2_figure_clusters.png")
+ggsave(tsne3, file="~/SeuratProject/Integrated data/tsne3_cluster.names.png")
+ggsave(tsne4, file="~/SeuratProject/Integrated data/tsne4.png")
 
+# Cluster the integrated matrix and look how clusters are distributed between the two sets
+#seurat_integrated.sct <- FindNeighbors(seurat_integrated.sct, dims = 1:30, k.param = 10, verbose = F)
+#seurat_integrated.sct <- FindClusters(seurat_integrated.sct, verbose = F)
 
-##### cluster the integrated matrix and look how clusters are distributed between the two sets
-seurat_integrated.sct <- FindNeighbors(seurat_integrated.sct, dims = 1:30, k.param = 10, verbose = F)
-seurat_integrated.sct <- FindClusters(seurat_integrated.sct, verbose = F)
-
-# see new clusters
+# See new clusters
 levels(x = seurat_integrated.sct)
 
 # calculate the number of cells in each cluster that came for aldinger or lu dataset
@@ -103,14 +96,769 @@ count_table_aldinger_lu <- table(seurat_integrated.sct@meta.data$figure_clusters
 count_table_aldinger_clusters <- table(seurat_integrated.sct@meta.data$seurat_clusters, seurat_integrated.sct@meta.data$figure_clusters)
 count_table_lu_clusters <- table(seurat_integrated.sct@meta.data$seurat_clusters, seurat_integrated.sct@meta.data$cluster.names)
 
-# table showing relationship between Aldinger clusters and my new integrated clusters
-write.table(count_table_aldinger_clusters, file='~/SeuratProject/aldinger_clusters.txt')
+write.table(count_table_aldinger, file = "~/SeuratProject/Integrated data/aldinger_counttable.txt")
+write.table(count_table_lu, file = "~/SeuratProject/Integrated data/lu_counttable.txt")
+write.table(count_table, file = "~/SeuratProject/Integrated data/counttable.txt")
+write.table(count_table_aldinger_lu, file = "~/SeuratProject/Integrated data/aldinger_lu_counttable.txt")
+write.table(count_table_aldinger_clusters,file = "~/SeuratProject/Integrated data/aldinger_clusters_counttable.txt")
+write.table(count_table_lu_clusters,file = "~/SeuratProject/Integrated data/lu_clusters_counttable.txt")
 
-# table showing relationship between Lu clusters and my new integrated clusters
-write.table(count_table_lu_clusters, file='~/SeuratProject/lu_clusters.txt')
+require(tidyverse)
 
-# table showing relationship between Aldinger and Lu clusters
-write.table(count_table_aldinger_lu, file='~/SeuratProject/aldinger_lu.txt')
+df <- data.frame(figure_clusters = seurat_integrated.sct@meta.data$figure_clusters, 
+cluster.names = seurat_integrated.sct@meta.data$cluster.names)
 
-# table showing relationship between both Aldinger and Lu and new integrated clusters
-write.table(count_table, file='~/SeuratProject/aldinger_lu_clusters.txt')
+df <- df %>% 
+  unite(merge_clusters, c("figure_clusters", "cluster.names"))
+
+df$merge_clusters <- gsub("_NA","_Aldinger", df$merge_clusters)
+df$merge_clusters <- gsub("NA_","Lu_", df$merge_clusters)
+
+seurat_integrated.sct$merge_clusters <- df$merge_clusters
+
+count_table_merged_clusters <- table(seurat_integrated.sct@meta.data$seurat_clusters, df$merge_clusters)
+write.table(count_table_merged_clusters,file = "~/SeuratProject/Integrated data/mergedclusters_counttable.txt")
+
+# Plot a pheatmap for the count table
+library(pheatmap)
+library(ggplot2)
+
+merged_clusters_pheatmap <- pheatmap(count_table_merged_clusters, cluster_cols = F, cluster_rows = F, scale = "column")
+ggsave(merged_clusters_pheatmap, width= 10, height= 10, file="~/SeuratProject/Integrated data/merged_clusters_heatmap.png")
+
+########################################################################################
+############ METAGENE PROJECTION ###########
+# Extract the values for the projection
+Assays(seurat_integrated.sct, "integrated")
+DefaultAssay(seurat_integrated.sct) <- "integrated"
+
+# Extract the normalised count data
+tpms.matrix <- seurat_integrated.sct[["integrated"]]@scale.data
+library(NMF)
+library(MASS)
+
+nmf.res <- readRDS(file = "/home/raisaa/Group3-4App-main/StarProtocols_Guide/data/nmf.res.rds")
+
+# Load sample data
+source(file = "/home/raisaa/Group3-4App-main/StarProtocols_Guide/R/Project_NMF.R")
+
+# Project NMF model to sequencing data
+tpms.matrix <- project.NMF(input.array = as.matrix(tpms.matrix), nmf.result = nmf.res)
+g3g4.tpms <- t(tpms.matrix[c(3,1),]) 
+
+# Apply logistic transformation to metagenes
+logistic.g3g4.tpms <- apply(g3g4.tpms,2,function(x){(1 / (1 + exp(-x)))}) 
+logistic.g3g4.tpms.score <- apply(logistic.g3g4.tpms,1,function(x){x[2]/(x[1]+x[2])})
+
+# Scale values between 0 to 1 (continuuum score)
+logistic.g3g4.tpms.continuum.score <- (logistic.g3g4.tpms.score-min(logistic.g3g4.tpms.score)) / (max(logistic.g3g4.tpms.score)-min(logistic.g3g4.tpms.score))
+logistic.g3g4.tpms.continuum.score <- logistic.g3g4.tpms.score
+
+# Present output as data frame for export
+logistic.g3g4.tpms.continuum.score <- as.data.frame(logistic.g3g4.tpms.continuum.score)
+colnames(logistic.g3g4.tpms.continuum.score) -> "Continuum Score"
+data.frame(logistic.g3g4.tpms.continuum.score)
+
+# map the projected results back onto the seurat object
+logistic.g3g4.tpms.continuum.score -> seurat_integrated.sct$logistic.g3g4.tpms.continuum.score
+View(logistic.g3g4.tpms.continuum.score) ## each row should represent sample, column corresponds to continuum score value
+
+as.numeric(tpms.matrix[1,]) -> seurat_integrated.sct$group3_metagene
+as.numeric(tpms.matrix[3,]) -> seurat_integrated.sct$group4_metagene
+as.numeric(tpms.matrix[4,]) -> seurat_integrated.sct$shh_metagene
+as.numeric(tpms.matrix[2,]) -> seurat_integrated.sct$wnt_metagene
+
+logistic.g3g4.tpms.continuum.score -> seurat_integrated.sct$g3g4.score
+
+# Integrated clusters metagene projection
+gr4_seurat_clusters_vp <- VlnPlot(seurat_integrated.sct, features = "group4_metagene", group.by = "seurat_clusters")
+gr3_seurat_clusters_vp <- VlnPlot(seurat_integrated.sct, features = "group3_metagene" ,group.by = "seurat_clusters")
+shh_seurat_clusters_vp <- VlnPlot(seurat_integrated.sct, features = "shh_metagene" ,group.by = "seurat_clusters")
+wnt_seurat_clusters_vp <- VlnPlot(seurat_integrated.sct, features = "wnt_metagene" ,group.by = "seurat_clusters")
+
+grid_integrated_vp_projection <- plot_grid(gr4_seurat_clusters_vp,gr3_seurat_clusters_vp,shh_seurat_clusters_vp,wnt_seurat_clusters_vp, labels=c("a", "b","c","d"), ncol = 2, nrow = 2)
+ggsave(grid_integrated_vp_projection, height = 12, width = 16, 
+       file="~/SeuratProject/Integrated data/Metagene projection/Grid_Integrated_VP_Projection.png") 
+
+# Aldinger metagene projection
+wnt_figure_clusters_vp <- VlnPlot(seurat_integrated.sct, features = "wnt_metagene", group.by = "figure_clusters")
+shh_figure_clusters_vp <- VlnPlot(seurat_integrated.sct, features = "shh_metagene", group.by = "figure_clusters")
+gr3_figure_clusters_vp <- VlnPlot(seurat_integrated.sct, features = "group3_metagene", group.by = "figure_clusters")
+gr4_figure_clusters_vp <- VlnPlot(seurat_integrated.sct, features = "group4_metagene", group.by = "figure_clusters")
+
+grid_integrated_aldinger_vp_projection <- plot_grid(wnt_figure_clusters_vp,shh_figure_clusters_vp,gr3_figure_clusters_vp,gr4_figure_clusters_vp, labels=c("a", "b","c","d"), ncol = 2, nrow = 2)
+ggsave(grid_integrated_aldinger_vp_projection, height = 12, width = 16, 
+       file="~/SeuratProject/Integrated data/Metagene projection/Grid_Integrated_Aldinger_VP_Projection.png") 
+
+# Lu metagene projection
+wnt_cluster.names_vp <- VlnPlot(seurat_integrated.sct, features = "wnt_metagene", group.by = "cluster.names")
+shh_cluster.names_vp <-VlnPlot(seurat_integrated.sct, features = "shh_metagene", group.by = "cluster.names")
+gr3_cluster.names_vp <-VlnPlot(seurat_integrated.sct, features = "group3_metagene", group.by = "cluster.names")
+gr4_cluster.names_vp <-VlnPlot(seurat_integrated.sct, features = "group4_metagene", group.by = "cluster.names")
+
+grid_integrated_lu_vp_projection <- plot_grid(wnt_cluster.names_vp,shh_cluster.names_vp,gr3_cluster.names_vp,gr4_cluster.names_vp, labels=c("a", "b","c","d"), ncol = 2, nrow = 2)
+ggsave(grid_integrated_lu_vp_projection, height = 12, width = 16, 
+       file="~/SeuratProject/Integrated data/Metagene projection/Grid_Integrated_Lu_VP_Projection.png") 
+
+ggsave(gr4_seurat_clusters_vp, height=10, width=11, file="~/SeuratProject/Integrated data/vp_gr4_seurat_clusters.png")
+ggsave(gr3_seurat_clusters_vp, height=10, width=11, file="~/SeuratProject/Integrated data/vp_gr3_seurat_clusters.png")
+ggsave(shh_seurat_clusters_vp, height=10, width=11, file="~/SeuratProject/Integrated data/vp_shh_seurat_clusters.png")
+ggsave(wnt_seurat_clusters_vp, height=10, width=11, file="~/SeuratProject/Integrated data/vp_wnt_seurat_clusters.png")
+
+ggsave(wnt_figure_clusters_vp, height=10, width=11, file="~/SeuratProject/Integrated data/vp_wnt_figure_clusters.png")
+ggsave(gr3_figure_clusters_vp, height=10, width=11, file="~/SeuratProject/Integrated data/vp_gr3_figure_clusters.png")
+ggsave(shh_figure_clusters_vp, height=10, width=11, file="~/SeuratProject/Integrated data/vp_shh_figure_clusters.png")
+ggsave(gr4_figure_clusters_vp, height=10, width=11, file="~/SeuratProject/Integrated data/vp_gr4_figure_clusters.png")
+
+ggsave(gr4_cluster.names_vp, height=10, width=11, file="~/SeuratProject/Integrated data/vp_gr4_cluster.names.png")
+ggsave(gr3_cluster.names_vp, height=10, width=11, file="~/SeuratProject/Integrated data/vp_gr3_cluster.names.png")
+ggsave(shh_cluster.names_vp, height=10, width=11, file="~/SeuratProject/Integrated data/vp_shh_cluster.names.png")
+ggsave(wnt_cluster.names_vp, height=10, width=11, file="~/SeuratProject/Integrated data/vp_wnt_cluster.names.png")
+
+### draw some dimplots that show the clusters and the metagene and the g3g4 
+int.dimplot.cluster.names <- DimPlot(object = seurat_integrated.sct, group.by = "cluster.names")
+int_gr4_featureplot <- FeaturePlot(object = seurat_integrated.sct,  "group4_metagene", cols = c("grey","green"), min.cutoff = 0)
+int_gr3_featureplot <- FeaturePlot(object = seurat_integrated.sct, "group3_metagene", cols = c("grey","yellow"), min.cutoff = 0)
+int_shh_featureplot <- FeaturePlot(object = seurat_integrated.sct, "shh_metagene", cols = c("grey","red"),min.cutoff=0) 
+int_wnt_featureplot <- FeaturePlot(object = seurat_integrated.sct, "wnt_metagene", cols = c("grey","blue"), min.cutoff=0)
+
+##############################################################################################
+########## INTEGRATED DATA TRAJECTORY ANALYSIS ##########
+
+library(monocle3)
+library(ggplot2)
+library(dplyr)
+library(SeuratWrappers)
+library(Seurat)
+
+# Insert integrated Seurat object
+seurat_integrated.sct <- readRDS(file="~/SeuratProject/Integrated data/seurat_integrated.sct.rds")
+
+# To load data instantly..
+cds_from_seurat <- readRDS(file="~/SeuratProject/Integrated data/Trajectory analysis/Integrated data.rds")
+
+# Create CDS object
+seurat <- as.cell_data_set(seurat_integrated.sct)
+cds_from_seurat <- seurat
+rm(seurat)
+
+# Add gene metadata
+cds_from_seurat@rowRanges@elementMetadata@listData[["gene_short_name"]] <- rownames(seurat_integrated.sct[["integrated"]])
+
+# Preprocess CDS data
+cds_from_seurat <- preprocess_cds(cds_from_seurat, num_dim = 50)
+
+# Align CDS data
+cds_from_seurat <- align_cds(cds_from_seurat)
+
+# Reduce data dimension
+cds_from_seurat <- reduce_dimension(cds_from_seurat)
+
+# Cluster cells
+cds_from_seurat <- cluster_cells(cds_from_seurat)
+
+# Plot clustering before trajectory
+cluster.before.trajectory <- plot_cells(cds_from_seurat, show_trajectory_graph = FALSE,
+                                        color_cells_by = "cluster", label_groups_by_cluster = TRUE, group_label_size = 4) +
+  theme(legend.position = "right")
+
+ggsave(cluster.before.trajectory, height = 7, width = 9, 
+       file="~/SeuratProject/Integrated data/Trajectory analysis/Cluster_Before_Trajectory.png")
+
+# See partition
+plot_cells(cds_from_seurat, color_cells_by = "partition")
+
+# Plot learn graph
+cds_from_seurat <- learn_graph(cds_from_seurat)
+
+# Plot order graph
+cds_from_seurat <- order_cells(cds_from_seurat)
+
+saveRDS(cds_from_seurat, file = "~/SeuratProject/Integrated data/Trajectory analysis/cds_from_seurat.rds")
+cds_from_seurat <- readRDS(file = "~/SeuratProject/Integrated data/Trajectory analysis/cds_from_seurat.rds")
+
+# Plot clustering after trajectory (uses partition)
+cluster.after.trajectory <- plot_cells(cds_from_seurat,
+                                       color_cells_by = "cluster",
+                                       label_groups_by_cluster = FALSE) +
+  theme(legend.position = "right")
+
+cluster.after.trajectory2 <- plot_cells(cds_from_seurat,
+                                        color_cells_by = 'cluster',
+                                        label_groups_by_cluster = FALSE,
+                                        label_branch_points = FALSE,
+                                        label_roots = FALSE,
+                                        label_leaves = FALSE,
+)  + theme(legend.position = "right")
+
+ggsave(cluster.after.trajectory, height = 7, width = 9, 
+       file="~/SeuratProject/Integrated data/Trajectory analysis/Cluster_After_Trajectory.png")
+
+ggsave(cluster.after.trajectory2, height = 7, width = 9, 
+       file="~/SeuratProject/Integrated data/Trajectory analysis/Cluster_After_Trajectory2.png")
+
+# Plot clustering after trajectory (without partition)
+cds_from_seurat <- learn_graph(cds_from_seurat, use_partition = F)
+
+cds_from_seurat <- order_cells(cds_from_seurat)
+
+cluster.after.trajectory.nopart <- plot_cells(cds_from_seurat,
+                                              color_cells_by = "cluster",
+                                              label_groups_by_cluster = FALSE) +
+  theme(legend.position = "right")
+
+cluster.after.trajectory2.nopart <- plot_cells(cds_from_seurat,
+                                               color_cells_by = 'cluster',
+                                               label_groups_by_cluster = FALSE,
+                                               label_branch_points = FALSE,
+                                               label_roots = FALSE,
+                                               label_leaves = FALSE,
+) + theme(legend.position = "right")
+
+ggsave(cluster.after.trajectory.nopart, height = 7, width = 9, 
+       file="~/SeuratProject/Integrated data/Trajectory analysis/Cluster_After_Trajectory_Nopart.png")
+
+ggsave(cluster.after.trajectory2.nopart, height = 7, width = 9, 
+       file="~/SeuratProject/Integrated data/Trajectory analysis/Cluster_After_Trajectory2_Nopart.png")
+
+# Lu trajectory
+lu_trajectory <- plot_cells(cds_from_seurat,
+                            color_cells_by = 'cluster.names',
+                            label_groups_by_cluster = FALSE,
+                            label_branch_points = FALSE,
+                            label_roots = FALSE,
+                            label_leaves = FALSE,
+                            group_label_size = 4
+) + theme(legend.position = "right")
+
+# Aldinger
+aldinger_trajectory <- plot_cells(cds_from_seurat,
+                                  color_cells_by = 'figure_clusters',
+                                  label_groups_by_cluster = FALSE,
+                                  label_branch_points = FALSE,
+                                  label_roots = FALSE,
+                                  label_leaves = FALSE,
+                                  group_label_size = 4,
+)  + theme(legend.position = "right")
+
+aldinger_trajectory + lu_trajectory
+
+library(gridExtra)
+lu_aldinger_trajectory <- grid.arrange(aldinger_trajectory, lu_trajectory, nrow = 2
+) -> lu_aldinger_trajectory
+
+ggsave(lu_trajectory, height = 7, width = 9, 
+       file="~/SeuratProject/Integrated data/Trajectory analysis/Lu_Trajectory_Nopart.png")
+
+ggsave(aldinger_trajectory, height = 7, width = 9, 
+       file="~/SeuratProject/Integrated data/Trajectory analysis/Aldinger_Trajectory_Nopart.png")
+
+ggsave(lu_aldinger_trajectory, height = 9, width = 10, 
+       file="~/SeuratProject/Integrated data/Trajectory analysis/Lu_Aldinger_Trajectory_Nopart.png")
+
+# Plot pseudotime trajectory
+Pseudotime_Trajectory <- plot_cells(cds_from_seurat,
+                                    color_cells_by = 'pseudotime',
+                                    label_groups_by_cluster = FALSE,
+                                    label_branch_points = FALSE,
+                                    label_roots = FALSE,
+                                    label_leaves = FALSE)
+
+ggsave(Pseudotime_Trajectory, height = 7, width = 9, 
+       file="~/SeuratProject/Integrated data/Trajectory analysis/Pseudotime.png")
+
+# Plot trajectory analysis for gene markers
+genes.of.interest <- c("LMX1A", "ATOH1", "EN1", "OTX2")
+
+plot_cells(cds_from_seurat,
+           genes=genes.of.interest,
+           label_cell_groups=FALSE,
+           show_trajectory_graph=FALSE, 
+           norm_method = 'log',
+           scale_to_range = F,
+           min_expr = 0.1)
+
+# finding genes that change as a function of pseudotime
+deg <- graph_test(cds_from_seurat, neighbor_graph = 'principal_graph', cores = 4)
+
+deg %>% 
+  arrange(q_value) %>% 
+  filter(status == 'OK') %>% 
+  head()
+
+FeaturePlot(seurat_integrated.sct, features = c('HBG2', 'HBA2', 'HSPH1'))
+
+# visualizing pseudotime in seurat
+
+seurat_integrated.sct$pseudotime <- pseudotime(cds_from_seurat)
+FeaturePlot(seurat_integrated.sct, features = "pseudotime", label = T)
+
+################################################ NEW SEURAT INTEGRATION ###########################################
+######### NO UBCDIFF AND TCP #########
+
+library(Seurat)
+library(ggplot2)
+
+# Load objects
+subset.cerebellum.data3 <- readRDS(file="~/SeuratProject/Lu data analysis/subset.cerebellum.data3.rds")
+subset.cbl <- readRDS("~/SeuratProject/Aldinger data analysis/Subset/subset.cbl.rds")
+
+subset.cerebellum.data3@meta.data[, "protocol"] <- "Dataset by Aldinger et al."
+subset.cbl@meta.data[, "protocol"] <- "Dataset by Luo et al."
+            
+# Set up list, including both Aldinger and Lu data
+data_list <- list()
+data_list[["aldinger"]] <- subset.cbl
+data_list[["lu"]] <- subset.cerebellum.data3
+
+# Remove once objects are in the list 
+rm(subset.cbl)
+rm(subset.cerebellum.data3)
+
+# Apply SCTransform
+data_list <- lapply(X = data_list, FUN = SCTransform)
+
+# Select features that are repeatedly variable across datasets for integration
+features <- SelectIntegrationFeatures(object.list = data_list, nfeatures = 3000)
+data_list <- PrepSCTIntegration(object.list = data_list, anchor.features = features)
+
+# Identify anchors using the FindIntegrationAnchors() function, use these anchors to integrate the datasets together with IntegrateData().
+data_anchors <- FindIntegrationAnchors(object.list = data_list, normalization.method = "SCT", anchor.features = features)
+seurat_integrated.sct <- IntegrateData(anchorset = data_anchors, normalization.method = "SCT")
+rm(data_anchors)
+rm(data_list)
+
+# Specify that we will perform downstream analysis on the corrected data
+DefaultAssay(seurat_integrated.sct) <- "integrated"
+
+# Run the standard workflow for visualization and clustering
+seurat_integrated.sct <- RunPCA(seurat_integrated.sct, npcs = 30, verbose = F)
+seurat_integrated.sct <- RunUMAP(seurat_integrated.sct, reduction = "pca", dims = 1:30, verbose = F)
+seurat_integrated.sct <- RunTSNE(seurat_integrated.sct, dims = 1:30)
+
+seurat_integrated.sct <- saveRDS(seurat_integrated.sct, file="~/SeuratProject/Integrated data/seurat_integrated.sct.rds")
+seurat_integrated.sct <- readRDS(file="~/SeuratProject/Integrated data/seurat_integrated.sct.rds")
+
+# Plot integrated UMAP
+p1 <- DimPlot(seurat_integrated.sct, reduction = "umap", label = T)
+plot(p1)
+
+# Plot integrated relationship to Aldinger
+p2 <- DimPlot(seurat_integrated.sct, reduction = "umap", split.by = "protocol", label = T)
+plot(p2)
+
+# Plot integrated relationship to lu
+p3 <- DimPlot(seurat_integrated.sct, reduction = "umap", group.by = "cluster.names")
+plot(p3)
+
+# Plot the splitted UMAP to make the comparison easier
+p4 <- DimPlot(seurat_integrated.sct, reduction = "umap", group.by = "figure_clusters")
+plot(p4)
+
+p1+p2+p3+p4
+
+ggsave(p1, height=7,width=8,file="~/SeuratProject/Integrated data/No UBCdiff_TCP/umap_dimplot1.png")
+ggsave(p2, height=7,width=8,file="~/SeuratProject/Integrated data/No UBCdiff_TCP/umap_dimplot2_figure_clusters.png")
+ggsave(p3, height=7,width=8,file="~/SeuratProject/Integrated data/No UBCdiff_TCP/umap_dimplot3_cluster.names.png")
+ggsave(p4, height=7,width=8,file="~/SeuratProject/Integrated data/No UBCdiff_TCP/umap_dimplot4_protocol.png")
+
+library(cowplot)
+grid_integrated_dimplot <- plot_grid(p1,p2,p3,p4, labels=c("a","b","c","d"),nrow = 2)
+ggsave(grid_integrated_dimplot, height=11, width=15,file="~/SeuratProject/Integrated data/No UBCdiff_TCP/grid_umap_integrated_dimplot.png")
+
+# Plot TSNE
+tsne1 <- DimPlot(seurat_integrated.sct, reduction = "tsne", label = TRUE, group.by = "protocol")
+tsne2 <- DimPlot(seurat_integrated.sct, reduction = "tsne", label = TRUE)
+tsne3 <- DimPlot(seurat_integrated.sct, reduction = "tsne", label = TRUE, group.by = "cluster.names")
+tsne4 <- DimPlot(seurat_integrated.sct, reduction = "tsne", label = TRUE, group.by = "figure_clusters")
+ggsave(tsne1, file="~/SeuratProject/Integrated data/No UBCdiff_TCP/tsne1_protocol.png")
+ggsave(tsne2, file="~/SeuratProject/Integrated data/No UBCdiff_TCP/tsne2_figure_clusters.png")
+ggsave(tsne3, file="~/SeuratProject/Integrated data/No UBCdiff_TCP/tsne3_cluster.names.png")
+ggsave(tsne4, file="~/SeuratProject/Integrated data/No UBCdiff_TCP/tsne4.png")
+
+# Cluster the integrated matrix and look how clusters are distributed between the two sets
+#seurat_integrated.sct <- FindNeighbors(seurat_integrated.sct, dims = 1:30, k.param = 10, verbose = F)
+#seurat_integrated.sct <- FindClusters(seurat_integrated.sct, verbose = F)
+
+markers.to.plot <- c("RSPO1", "WNT2B", "OLIG3", "SLFN13", "CALCB", "CALCA","ATP6V1C2","RSPO3","DPYD","NEUROG1",
+                     "OTX2","MKI67","LMX1A","EOMES","PAX6","WLS")
+DotPlot(seurat_integrated.sct, features = markers.to.plot, cols = c("blue", "red"), dot.scale = 8, split.by = "protocol") +
+  RotatedAxis()
+
+# See new clusters
+levels(x = seurat_integrated.sct)
+
+# calculate the number of cells in each cluster that came for aldinger or lu dataset
+count_table_aldinger <- table(seurat_integrated.sct@meta.data$figure_clusters, seurat_integrated.sct@meta.data$protocol)
+count_table_lu <- table(seurat_integrated.sct@meta.data$cluster.names, seurat_integrated.sct@meta.data$protocol)
+count_table <- table(seurat_integrated.sct@meta.data$seurat_clusters, seurat_integrated.sct@meta.data$protocol)
+count_table_aldinger_lu <- table(seurat_integrated.sct@meta.data$figure_clusters, seurat_integrated.sct@meta.data$cluster.names)
+count_table_aldinger_clusters <- table(seurat_integrated.sct@meta.data$seurat_clusters, seurat_integrated.sct@meta.data$figure_clusters)
+count_table_lu_clusters <- table(seurat_integrated.sct@meta.data$seurat_clusters, seurat_integrated.sct@meta.data$cluster.names)
+
+write.table(count_table_aldinger, file = "~/SeuratProject/Integrated data/No UBCdiff_TCP/aldinger_counttable.txt")
+write.table(count_table_lu, file = "~/SeuratProject/Integrated data/No UBCdiff_TCP/lu_counttable.txt")
+write.table(count_table, file = "~/SeuratProject/Integrated data/No UBCdiff_TCP/counttable.txt")
+write.table(count_table_aldinger_lu, file = "~/SeuratProject/Integrated data/No UBCdiff_TCP/aldinger_lu_counttable.txt")
+write.table(count_table_aldinger_clusters,file = "~/SeuratProject/Integrated data/No UBCdiff_TCP/aldinger_clusters_counttable.txt")
+write.table(count_table_lu_clusters,file = "~/SeuratProject/Integrated data/No UBCdiff_TCP/lu_clusters_counttable.txt")
+
+require(tidyverse)
+
+df <- data.frame(figure_clusters = seurat_integrated.sct@meta.data$figure_clusters, 
+                 cluster.names = seurat_integrated.sct@meta.data$cluster.names)
+
+df <- df %>% 
+  unite(merge_clusters, c("figure_clusters", "cluster.names"))
+
+df$merge_clusters <- gsub("_NA","_Aldinger", df$merge_clusters)
+df$merge_clusters <- gsub("NA_","Luo_", df$merge_clusters)
+
+seurat_integrated.sct$merge_clusters <- df$merge_clusters
+
+count_table_merged_clusters <- table(seurat_integrated.sct@meta.data$seurat_clusters, df$merge_clusters)
+write.table(count_table_merged_clusters,file = "~/SeuratProject/Integrated data/No UBCdiff_TCP/mergedclusters_counttable.txt")
+
+# Plot a pheatmap for the count table
+library(pheatmap)
+library(ggplot2)
+
+merged_clusters_pheatmap <- pheatmap(count_table_merged_clusters, cluster_cols = F, cluster_rows = F, scale = "column")
+ggsave(merged_clusters_pheatmap, width= 12, height= 10, file="~/SeuratProject/Integrated data/No UBCdiff_TCP/merged_clusters_heatmap.png")
+
+########################################################################################
+############ METAGENE PROJECTION ###########
+# Extract the values for the projection
+DefaultAssay(seurat_integrated.sct) <- "integrated"
+
+# Extract the normalised count data
+tpms.matrix <- seurat_integrated.sct[["integrated"]]@scale.data
+library(NMF)
+library(MASS)
+
+# Load required data objects
+nmf.res <- readRDS(file = "/home/raisaa/Group3-4App-main/StarProtocols_Guide/data/nmf.res.rds")
+
+# Load sample data
+source(file = "/home/raisaa/Group3-4App-main/StarProtocols_Guide/R/Project_NMF.R")
+
+# Project NMF model to sequencing data
+tpms.matrix <- project.NMF(input.array = as.matrix(tpms.matrix), nmf.result = nmf.res)
+g3g4.tpms <- t(tpms.matrix[c(3,1),]) 
+
+# Apply logistic transformation to metagenes
+logistic.g3g4.tpms <- apply(g3g4.tpms,2,function(x){(1 / (1 + exp(-x)))}) 
+logistic.g3g4.tpms.score <- apply(logistic.g3g4.tpms,1,function(x){x[2]/(x[1]+x[2])})
+
+# Scale values between 0 to 1 (continuuum score)
+logistic.g3g4.tpms.continuum.score <- (logistic.g3g4.tpms.score-min(logistic.g3g4.tpms.score)) / (max(logistic.g3g4.tpms.score)-min(logistic.g3g4.tpms.score))
+logistic.g3g4.tpms.continuum.score <- logistic.g3g4.tpms.score
+
+# Present output as data frame for export
+logistic.g3g4.tpms.continuum.score <- as.data.frame(logistic.g3g4.tpms.continuum.score)
+colnames(logistic.g3g4.tpms.continuum.score) -> "Continuum Score"
+data.frame(logistic.g3g4.tpms.continuum.score)
+
+# map the projected results back onto the seurat object
+logistic.g3g4.tpms.continuum.score -> seurat_integrated.sct$logistic.g3g4.tpms.continuum.score
+View(logistic.g3g4.tpms.continuum.score) ## each row should represent sample, column corresponds to continuum score value
+
+as.numeric(tpms.matrix[1,]) -> seurat_integrated.sct$group3_metagene
+as.numeric(tpms.matrix[3,]) -> seurat_integrated.sct$group4_metagene
+as.numeric(tpms.matrix[4,]) -> seurat_integrated.sct$shh_metagene
+as.numeric(tpms.matrix[2,]) -> seurat_integrated.sct$wnt_metagene
+
+logistic.g3g4.tpms.continuum.score -> seurat_integrated.sct$g3g4.score
+
+# Integrated clusters metagene projection
+gr4_seurat_clusters_vp <- VlnPlot(seurat_integrated.sct, features = "group4_metagene", group.by = "seurat_clusters")
+gr3_seurat_clusters_vp <- VlnPlot(seurat_integrated.sct, features = "group3_metagene" ,group.by = "seurat_clusters")
+shh_seurat_clusters_vp <- VlnPlot(seurat_integrated.sct, features = "shh_metagene" ,group.by = "seurat_clusters")
+wnt_seurat_clusters_vp <- VlnPlot(seurat_integrated.sct, features = "wnt_metagene" ,group.by = "seurat_clusters")
+
+grid_integrated_vp_projection <- plot_grid(gr4_seurat_clusters_vp,gr3_seurat_clusters_vp,shh_seurat_clusters_vp,wnt_seurat_clusters_vp, labels=c("a", "b","c","d"), ncol = 2, nrow = 2)
+ggsave(grid_integrated_vp_projection, height = 16, width = 20, 
+       file="~/SeuratProject/Integrated data/No UBCdiff_TCP/Metagene projection/Grid_Integrated_VP_Projection.png") 
+
+# Aldinger metagene projection
+wnt_figure_clusters_vp <- VlnPlot(seurat_integrated.sct, features = "wnt_metagene", group.by = "figure_clusters")
+shh_figure_clusters_vp <- VlnPlot(seurat_integrated.sct, features = "shh_metagene", group.by = "figure_clusters")
+gr3_figure_clusters_vp <- VlnPlot(seurat_integrated.sct, features = "group3_metagene", group.by = "figure_clusters")
+gr4_figure_clusters_vp <- VlnPlot(seurat_integrated.sct, features = "group4_metagene", group.by = "figure_clusters")
+
+
+grid_integrated_aldinger_vp_projection <- plot_grid(wnt_figure_clusters_vp,shh_figure_clusters_vp,gr3_figure_clusters_vp,gr4_figure_clusters_vp, labels=c("a", "b","c","d"), ncol = 2, nrow = 2)
+ggsave(grid_integrated_aldinger_vp_projection, height = 12, width = 16, 
+       file="~/SeuratProject/Integrated data/No UBCdiff_TCP/Metagene projection/Grid_Integrated_Aldinger_VP_Projection.png") 
+
+# Lu metagene projection
+wnt_cluster.names_vp <- VlnPlot(seurat_integrated.sct, features = "wnt_metagene", group.by = "cluster.names")
+shh_cluster.names_vp <-VlnPlot(seurat_integrated.sct, features = "shh_metagene", group.by = "cluster.names")
+gr3_cluster.names_vp <-VlnPlot(seurat_integrated.sct, features = "group3_metagene", group.by = "cluster.names")
+gr4_cluster.names_vp <-VlnPlot(seurat_integrated.sct, features = "group4_metagene", group.by = "cluster.names")
+
+grid_integrated_lu_vp_projection <- plot_grid(wnt_cluster.names_vp,shh_cluster.names_vp,gr3_cluster.names_vp,gr4_cluster.names_vp, labels=c("e", "f","g","h"), ncol = 2, nrow = 2)
+ggsave(grid_integrated_lu_vp_projection, height = 12, width = 16, 
+       file="~/SeuratProject/Integrated data/No UBCdiff_TCP/Metagene projection/Grid_Integrated_Lu_VP_Projection.png") 
+
+grid_integrated_lu_aldinger_vp_projection <- plot_grid(grid_integrated_aldinger_vp_projection,grid_integrated_lu_vp_projection,
+                                                       labels = c(" "," "), nrow=2)
+ggsave(grid_integrated_lu_aldinger_vp_projection, height = 18, width = 21, 
+       file="~/SeuratProject/Integrated data/No UBCdiff_TCP/Metagene projection/Grid_Integrated_Lu_Aldinger_VP_Projection.png") 
+
+ggsave(gr4_seurat_clusters_vp, height=10, width=11, file="~/SeuratProject/Integrated data/No UBCdiff_TCP/vp_gr4_seurat_clusters.png")
+ggsave(gr3_seurat_clusters_vp, height=10, width=11, file="~/SeuratProject/Integrated data/No UBCdiff_TCP/vp_gr3_seurat_clusters.png")
+ggsave(shh_seurat_clusters_vp, height=10, width=11, file="~/SeuratProject/Integrated data/No UBCdiff_TCP/vp_shh_seurat_clusters.png")
+ggsave(wnt_seurat_clusters_vp, height=10, width=11, file="~/SeuratProject/Integrated data/No UBCdiff_TCP/vp_wnt_seurat_clusters.png")
+
+ggsave(wnt_figure_clusters_vp, height=10, width=11, file="~/SeuratProject/Integrated data/No UBCdiff_TCP/vp_wnt_figure_clusters.png")
+ggsave(gr3_figure_clusters_vp, height=10, width=11, file="~/SeuratProject/Integrated data/No UBCdiff_TCP/vp_gr3_figure_clusters.png")
+ggsave(shh_figure_clusters_vp, height=10, width=11, file="~/SeuratProject/Integrated data/No UBCdiff_TCP/vp_shh_figure_clusters.png")
+ggsave(gr4_figure_clusters_vp, height=10, width=11, file="~/SeuratProject/Integrated data/No UBCdiff_TCP/vp_gr4_figure_clusters.png")
+
+ggsave(gr4_cluster.names_vp, height=10, width=11, file="~/SeuratProject/Integrated data/No UBCdiff_TCP/vp_gr4_cluster.names.png")
+ggsave(gr3_cluster.names_vp, height=10, width=11, file="~/SeuratProject/Integrated data/No UBCdiff_TCP/vp_gr3_cluster.names.png")
+ggsave(shh_cluster.names_vp, height=10, width=11, file="~/SeuratProject/Integrated data/No UBCdiff_TCP/vp_shh_cluster.names.png")
+ggsave(wnt_cluster.names_vp, height=10, width=11, file="~/SeuratProject/Integrated data/No UBCdiff_TCP/vp_wnt_cluster.names.png")
+
+### draw some dimplots that show the clusters and the metagene and the g3g4 
+int.dimplot.cluster.names <- DimPlot(object = seurat_integrated.sct, group.by = "cluster.names")
+int_gr4_featureplot <- FeaturePlot(object = seurat_integrated.sct,  "group4_metagene", cols = c("grey","green"), min.cutoff = 0)
+int_gr3_featureplot <- FeaturePlot(object = seurat_integrated.sct, "group3_metagene", cols = c("grey","yellow"), min.cutoff = 0)
+int_shh_featureplot <- FeaturePlot(object = seurat_integrated.sct, "shh_metagene", cols = c("grey","red"),min.cutoff=0) 
+int_wnt_featureplot <- FeaturePlot(object = seurat_integrated.sct, "wnt_metagene", cols = c("grey","blue"), min.cutoff=0)
+
+grid_integrated_lu_aldinger_fp_projection <- plot_grid(int_gr3_featureplot,int_gr4_featureplot,int_shh_featureplot,int_wnt_featureplot,
+                                                       labels = c(" "," "), nrow=2)
+ggsave(grid_integrated_lu_aldinger_fp_projection, height = 18, width = 21, 
+       file="~/SeuratProject/Integrated data/No UBCdiff_TCP/Metagene projection/Grid_Integrated_Lu_Aldinger_FP_Projection.png") 
+
+grid_integrated_all <- plot_grid(grid_integrated_lu_aldinger_vp_projection, grid_integrated_lu_aldinger_fp_projection)
+ggsave(grid_integrated_all, height=18, width=23, file="~/SeuratProject/Integrated data/No UBCdiff_TCP/Metagene projection/Grid_Integrated_VPFP_Projection.png")
+##############################################################################################
+########## INTEGRATED DATA TRAJECTORY ANALYSIS ##########
+
+library(monocle3)
+library(ggplot2)
+library(dplyr)
+library(SeuratWrappers)
+library(Seurat)
+
+# Insert integrated Seurat object
+saveRDS(seurat_integrated.sct, "~/SeuratProject/Integrated data/seurat_integrated.sct.rds")
+seurat_integrated.sct <- readRDS(file="~/SeuratProject/Integrated data/seurat_integrated.sct.rds")
+cds_from_seurat <- readRDS(file="~/SeuratProject/Integrated data/Trajectory analysis/Integrated data.rds")
+
+# Create CDS object
+cds_from_seurat <- as.cell_data_set(seurat_integrated.sct)
+
+## Calculate size factors using built-in function in monocle3
+cds_from_seurat <- estimate_size_factors(cds_from_seurat)
+
+# Add gene metadata
+cds_from_seurat@rowRanges@elementMetadata@listData[["gene_short_name"]] <- rownames(seurat_integrated.sct[["integrated"]])
+
+# Preprocess CDS data
+cds_from_seurat <- preprocess_cds(cds_from_seurat, num_dim = 50)
+
+# Align CDS data
+cds_from_seurat <- align_cds(cds_from_seurat)
+
+# Reduce data dimension
+cds_from_seurat <- reduce_dimension(cds_from_seurat)
+
+# Cluster cells
+cds_from_seurat <- cluster_cells(cds_from_seurat)
+
+# Plot clustering before trajectory
+cluster.before.trajectory <- plot_cells(cds_from_seurat, show_trajectory_graph = FALSE,
+                                        color_cells_by = "cluster", label_groups_by_cluster = TRUE, group_label_size = 4) +
+  theme(legend.position = "right")
+
+ggsave(cluster.before.trajectory, height = 7, width = 9, 
+       file="~/SeuratProject/Integrated data/No UBCdiff_TCP/Trajectory analysis/Cluster_Before_Trajectory.png")
+
+# See partition
+plot_cells(cds_from_seurat, color_cells_by = "partition")
+
+# Plot learn graph
+cds_from_seurat <- learn_graph(cds_from_seurat)
+
+# Plot order graph
+cds_from_seurat <- order_cells(cds_from_seurat)
+
+saveRDS(cds_from_seurat, file = "~/SeuratProject/Integrated data/No UBCdiff_TCP/Trajectory analysis/cds_from_seurat.rds")
+cds_from_seurat <- readRDS(file = "~/SeuratProject/Integrated data/No UBCdiff_TCP/Trajectory analysis/cds_from_seurat.rds")
+
+# Plot clustering after trajectory (uses partition)
+cluster.after.trajectory <- plot_cells(cds_from_seurat,
+                                       color_cells_by = "cluster",
+                                       label_groups_by_cluster = FALSE) +
+  theme(legend.position = "right")
+
+cluster.after.trajectory2 <- plot_cells(cds_from_seurat,
+                                        color_cells_by = 'cluster',
+                                        label_groups_by_cluster = FALSE,
+                                        label_branch_points = FALSE,
+                                        label_roots = FALSE,
+                                        label_leaves = FALSE,
+)  + theme(legend.position = "right")
+
+ggsave(cluster.after.trajectory, height = 7, width = 9, 
+       file="~/SeuratProject/Integrated data/No UBCdiff_TCP/Trajectory analysis/Cluster_After_Trajectory.png")
+
+ggsave(cluster.after.trajectory2, height = 7, width = 9, 
+       file="~/SeuratProject/Integrated data/No UBCdiff_TCP/Trajectory analysis/Cluster_After_Trajectory2.png")
+
+# Plot clustering after trajectory (without partition)
+cds_from_seurat <- learn_graph(cds_from_seurat, use_partition = F)
+
+cds_from_seurat <- order_cells(cds_from_seurat)
+
+cluster.after.trajectory.nopart <- plot_cells(cds_from_seurat,
+                                              color_cells_by = "cluster",
+                                              label_groups_by_cluster = FALSE) +
+  theme(legend.position = "right")
+
+cluster.after.trajectory2.nopart <- plot_cells(cds_from_seurat,
+                                               color_cells_by = 'cluster',
+                                               label_groups_by_cluster = FALSE,
+                                               label_branch_points = FALSE,
+                                               label_roots = FALSE,
+                                               label_leaves = FALSE,
+) + theme(legend.position = "right")
+
+ggsave(cluster.after.trajectory.nopart, height = 7, width = 9, 
+       file="~/SeuratProject/Integrated data/No UBCdiff_TCP/Trajectory analysis/Cluster_After_Trajectory_Nopart.png")
+
+ggsave(cluster.after.trajectory2.nopart, height = 7, width = 9, 
+       file="~/SeuratProject/Integrated data/No UBCdiff_TCP/Trajectory analysis/Cluster_After_Trajectory2_Nopart.png")
+
+# Lu trajectory
+lu_trajectory <- plot_cells(cds_from_seurat,
+                            color_cells_by = 'cluster.names',
+                            label_groups_by_cluster = FALSE,
+                            label_branch_points = FALSE,
+                            label_roots = FALSE,
+                            label_leaves = FALSE,
+                            group_label_size = 4
+) + theme(legend.position = "right")
+
+# Aldinger
+aldinger_trajectory <- plot_cells(cds_from_seurat,
+                                  color_cells_by = 'figure_clusters',
+                                  label_groups_by_cluster = FALSE,
+                                  label_branch_points = FALSE,
+                                  label_roots = FALSE,
+                                  label_leaves = FALSE,
+                                  group_label_size = 4,
+)  + theme(legend.position = "right")
+
+aldinger_trajectory + lu_trajectory
+
+lu_aldinger_trajectory <- plot_grid(aldinger_trajectory,lu_trajectory, labels=c("a","b"), nrow=1)
+
+ggsave(lu_trajectory, height = 7, width = 9, 
+       file="~/SeuratProject/Integrated data/No UBCdiff_TCP/Trajectory analysis/Lu_Trajectory_Nopart.png")
+
+ggsave(aldinger_trajectory, height = 7, width = 9, 
+       file="~/SeuratProject/Integrated data/No UBCdiff_TCP/Trajectory analysis/Aldinger_Trajectory_Nopart.png")
+
+ggsave(lu_aldinger_trajectory, height = 9, width = 14, 
+       file="~/SeuratProject/Integrated data/No UBCdiff_TCP/Trajectory analysis/Lu_Aldinger_Trajectory_Nopart.png")
+
+# Plot pseudotime trajectory
+Pseudotime_Trajectory <- plot_cells(cds_from_seurat,
+                                    color_cells_by = 'pseudotime',
+                                    label_groups_by_cluster = TRUE,
+                                    label_branch_points = FALSE,
+                                    label_roots = FALSE,
+                                    label_leaves = FALSE)
+
+ggsave(Pseudotime_Trajectory, height = 7, width = 9, 
+       file="~/SeuratProject/Integrated data/No UBCdiff_TCP/Trajectory analysis/Pseudotime.png")
+
+### draw some dimplots that show the clusters and the metagene and the g3g4 
+cds.lu.dimplot.cluster.names <- DimPlot(object = cds_lu, group.by = "cluster.names")
+
+plot_cells(cds_from_seurat, color_cells_by = "group4_metagene")
+
+
+meta.g4 <- plot_cells(cds_from_seurat,
+                      color_cells_by = "group4_metagene",
+                      label_cell_groups=FALSE,
+                      label_leaves=FALSE,
+                      label_branch_points=FALSE,
+                      graph_label_size=1.5,
+                      cell_stroke = 0,
+                      scale_to_range = F, cell_size = 2, alpha = 0.1) + 
+  scale_colour_gradient2(
+    low = "white",
+    mid = "white",
+    high = "green",
+    midpoint = 0.1,
+    space = "Lab",
+    na.value = "grey50",
+    guide = "colourbar",
+    aesthetics = "colour"
+  )
+
+meta.g3 <- plot_cells(cds_from_seurat,
+                      color_cells_by = "group3_metagene",
+                      label_cell_groups=FALSE,
+                      label_leaves=FALSE,
+                      label_branch_points=FALSE,
+                      graph_label_size=1.5,
+                      cell_stroke = 0,
+                      scale_to_range = F, cell_size = 2, alpha = 0.1) + 
+  scale_colour_gradient2(
+    low = "white",
+    mid = "white",
+    high = "yellow",
+    midpoint = 0.1,
+    space = "Lab",
+    na.value = "grey50",
+    guide = "colourbar",
+    aesthetics = "colour"
+  )
+
+meta.shh <- plot_cells(cds_from_seurat,
+                      color_cells_by = "shh_metagene",
+                      label_cell_groups=FALSE,
+                      label_leaves=FALSE,
+                      label_branch_points=FALSE,
+                      graph_label_size=1.5,
+                      cell_stroke = 0,
+                      scale_to_range = F, cell_size = 2, alpha = 0.1) + 
+  scale_colour_gradient2(
+    low = "white",
+    mid = "white",
+    high = "red",
+    midpoint = 0.1,
+    space = "Lab",
+    na.value = "grey50",
+    guide = "colourbar",
+    aesthetics = "colour"
+  )
+
+meta.wnt <- plot_cells(cds_from_seurat,
+                      color_cells_by = "wnt_metagene",
+                      label_cell_groups=FALSE,
+                      label_leaves=FALSE,
+                      label_branch_points=FALSE,
+                      graph_label_size=1.5,
+                      cell_stroke = 0,
+                      scale_to_range = F, cell_size = 2, alpha = 0.1) + 
+  scale_colour_gradient2(
+    low = "white",
+    mid = "white",
+    high = "blue",
+    midpoint = 0.1,
+    space = "Lab",
+    na.value = "grey50",
+    guide = "colourbar",
+    aesthetics = "colour"
+  )
+
+all.trajectory.metagenes <- plot_grid(aldinger_trajectory,lu_trajectory,meta.g3,meta.g4,meta.shh,meta.wnt, labels=c("a", " ","c","d","e","f"), ncol = 2, nrow = 3)
+

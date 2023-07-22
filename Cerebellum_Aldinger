@@ -5,7 +5,7 @@ library(Matrix)
 library(ggpubr)
 library(ggplot2)
 
-####################### Aldinger #######################
+####################### Cerebellum data by Aldinger et al. #######################
 # Create object
 cbl <- readRDS("/home/cancer/rna_seq_mb/cbl_integrated_cleanCC_200518.rds")
 
@@ -100,7 +100,16 @@ ggsave(grid_aldinger_qc, height=12,width=27,file="~/SeuratProject/Aldinger data 
 grid_aldinger_dimreduct <- plot_grid(aldinger_pca,aldinger_elbowplot,aldinger_umap,labels=c("a","b","c"),nrow=1)
 ggsave(grid_aldinger_dimreduct, height=12,width=24,file="~/SeuratProject/Aldinger data analysis/Basic Seurat/grid_aldinger_dimreduct.png")
 
-############# NEW SUBSET ##############
+############# Create a new subset comprising the rhombic lip lineage, as defined by Aldinger et al. ##############
+# Create object
+cbl <- readRDS("/home/cancer/rna_seq_mb/cbl_integrated_cleanCC_200518.rds")
+
+# Set the default assay
+DefaultAssay(cbl) <- "RNA"
+
+# Perform quality control (QC)
+cbl$percent.mt[is.na(cbl$percent.mt)] <- 0
+
 # List names of all clusters
 levels(cbl$figure_clusters)
 
@@ -189,9 +198,7 @@ Aldinger_subset_umap_dimplot <- DimPlot(subset.cbl, reduction = "umap", label = 
 ggsave(Aldinger_subset_umap_dimplot, height = 9, width = 12, file="~/SeuratProject/Aldinger data analysis/Subset/Aldinger_Subset_UMAP.png")
 
 p1 <- DimPlot(subset.cbl, reduction = "umap", group.by = "figure_clusters", label = T, label.size = 6) +
-  theme(
-    legend.text = element_text(size = 20)
-  )
+  theme(legend.position = "none")
 p2 <- DimPlot(subset.cbl, reduction = "umap", group.by="seurat_clusters", label = T, label.size = 6) +
   theme(
     legend.text = element_text(size = 20)
@@ -222,19 +229,13 @@ grid_aldinger_subset_qcmetrics <- plot_grid(aldinger.subset.qc.metrics1, aldinge
 
 grid_aldinger_subset_dimreduct <- plot_grid(aldinger_elbowplot, aldinger_subset_pca_dimplot, labels=c("c","d"), nrow=1) 
 
-grid_aldinger_subset_dimreduct2 <- plot_grid(p1,p2,labels=c("e","f"),nrow=1)
+grid_aldinger_subset_dimreduct2 <- plot_grid(p1,p2,labels=c("a","b"),nrow=1)
 
 ggsave(grid_aldinger_subset_dimreduct, height=12,width=20,file="~/SeuratProject/Aldinger data analysis/Subset/grid_aldinger_subset_dimreduct.png")
 
 grid_all_aldinger_subset <- plot_grid(grid_aldinger_subset_qcmetrics, aldinger.subset.feature.relationships, grid_aldinger_subset_dimreduct, grid_aldinger_subset_dimreduct2, labels=c(" ","b"," "," "),nrow = 4)
 
 ggsave(grid_all_aldinger_subset, height=30, width=20, file="~/SeuratProject/Aldinger data analysis/Subset/grid_all_aldinger_subset.png")
-
-saveRDS(subset.cbl, file = "~/SeuratProject/Aldinger data analysis/Subset/subset.cbl.rds")
-
-### subset.cbl$figure_clusters is the name of there clustering
-### you can use the function table(a,b) to create a comparison table
-### prop.table(a,b)
 
 table(Idents(subset.cbl), subset.cbl$figure_clusters)
 prop.table(table(Idents(subset.cbl), (subset.cbl$figure_clusters)), 2) -> proport
@@ -246,11 +247,11 @@ pheatmap(proport, cluster_rows = F, cluster_cols = F, scale = "none")
 saveRDS(subset.cbl, file = "/home/raisaa/SeuratProject/Aldinger data analysis/Subset/subset.cbl.rds")
 subset.cbl <- readRDS(file="/home/raisaa/SeuratProject/Aldinger data analysis/Subset/subset.cbl.rds")
 
-subset.cbl@meta.data[, "protocol"] <- "aldinger.data"
-
-#################### PROJECTION ####################
+#################### Medulloblastoma Metagene Projection ####################
 # Extract the values for the projection
 subset.cbl <- readRDS("/home/raisaa/SeuratProject/Aldinger data analysis/Subset/subset.cbl.rds")
+
+subset.cbl@meta.data[, "protocol"] <- "aldinger.data"
 
 # Set the default assay for this subset of cells to RNA
 DefaultAssay(object = subset.cbl) <- "RNA"
@@ -321,7 +322,7 @@ aldinger_wnt_violinplot_cluster.names <- aldinger_wnt_violinplot_cluster.names +
 grid_aldinger_vp_projection <- plot_grid(
   aldinger_gr3_violinplot_cluster.names, aldinger_gr4_violinplot_cluster.names,
   aldinger_shh_violinplot_cluster.names, aldinger_wnt_violinplot_cluster.names,
-  labels = c("f", "g", "h", "i"), ncol = 2, nrow = 2
+  labels = c("f", "g", "h", "i"), label_size = 20, ncol = 2, nrow = 2
 )
 
 # Add the legend to the plot grid
@@ -341,35 +342,31 @@ aldinger_shh_featureplot <- FeaturePlot(object = subset.cbl, "shh_metagene", col
 aldinger_wnt_featureplot <- FeaturePlot(object = subset.cbl, "wnt_metagene", cols = c("grey","blue"), min.cutoff=0)
 
 # Increase the size of the legend
-aldinger.dimplot.figure.clusters <- DimPlot(object = subset.cbl, group.by = "figure_clusters") +theme(
+aldinger.dimplot.figure.clusters <- DimPlot(object = subset.cbl, group.by = "figure_clusters", label=T, label.size = 5) +theme(
   legend.text = element_text(size = 20)
 )
 
-aldinger_gr4_featureplot <- FeaturePlot(object = subset.cbl, "group4_metagene", cols = c("grey", "green"), min.cutoff = 0) +
-  guides(fill = guide_legend(override.aes = list(size = legend_size)))
+aldinger_gr4_featureplot <- FeaturePlot(object = subset.cbl, "group4_metagene", cols = c("grey", "green"), min.cutoff = 0) 
 
-aldinger_gr3_featureplot <- FeaturePlot(object = subset.cbl, "group3_metagene", cols = c("grey", "yellow"), min.cutoff = 0) +
-  guides(fill = guide_legend(override.aes = list(size = legend_size)))
+aldinger_gr3_featureplot <- FeaturePlot(object = subset.cbl, "group3_metagene", cols = c("grey", "yellow"), min.cutoff = 0) 
 
-aldinger_shh_featureplot <- FeaturePlot(object = subset.cbl, "shh_metagene", cols = c("grey", "red"), min.cutoff = 0) +
-  guides(fill = guide_legend(override.aes = list(size = legend_size)))
+aldinger_shh_featureplot <- FeaturePlot(object = subset.cbl, "shh_metagene", cols = c("grey", "red"), min.cutoff = 0) 
 
-aldinger_wnt_featureplot <- FeaturePlot(object = subset.cbl, "wnt_metagene", cols = c("grey", "blue"), min.cutoff = 0) +
-  guides(fill = guide_legend(override.aes = list(size = legend_size)))
+aldinger_wnt_featureplot <- FeaturePlot(object = subset.cbl, "wnt_metagene", cols = c("grey", "blue"), min.cutoff = 0) 
 
 plot_grid(aldinger_gr3_featureplot,
           aldinger_gr4_featureplot,
           aldinger_shh_featureplot,
           aldinger_wnt_featureplot,
-          nrow = 2, labels = c("b","c","d","e")
+          nrow = 2, labels = c("b","c","d","e"), label_size = 20
 ) -> aldinger.dimplot.fp
 
 plot_grid(aldinger.dimplot.figure.clusters,
           aldinger.dimplot.fp,
           nrow = 2, 
-          labels = c("a"," ")) -> aldinger.dimplot.all
+          labels = c("a"," "), label_size = 20) -> aldinger.dimplot.all
 
-plot_grid(aldinger.dimplot.all,grid_aldinger_vp_projection) -> final.aldinger.dimplot.all
+plot_grid(aldinger.dimplot.fp,grid_aldinger_vp_projection) -> final.aldinger.dimplot.all
 
 ggsave(aldinger.dimplot.all, height = 14, width = 12, 
        file="~/SeuratProject/Aldinger data analysis/Metagene projection/Grid_Aldinger_Projection.png") 
@@ -382,7 +379,7 @@ ggsave(aldinger_wnt_featureplot, width = 10, height = 11, file="~/SeuratProject/
 ggsave(aldinger.dimplot.figure.clusters, width = 10, height = 11, file="~/SeuratProject/Aldinger data analysis/Metagene projection/Aldinger_DimplotProjection.png")
 ggsave(aldinger.dimplot.all, width = 12, height = 11, file="~/SeuratProject/Aldinger data analysis/Metagene projection/Aldinger_Projection.png")
 
-##### ALDINGER TRAJECTORY ANALYSIS #####
+##### Trajectory analysis #####
 library(dplyr)
 library(Seurat)
 library(patchwork)
@@ -441,14 +438,21 @@ ggsave(aldinger.after.trajectory, height = 7, width = 9,
        file="~/SeuratProject/Aldinger data analysis/Trajectory Analysis using Monocle3/Aldinger_After_Trajectory.png")
 
 # Plot clusters trajectory
+plot_title = "trajectory_aldinger"
 aldinger.clusters.trajectory <- plot_cells(cds_aldinger,
                                            color_cells_by = 'figure_clusters',
                                            label_groups_by_cluster = FALSE,
                                            label_branch_points = FALSE,
                                            label_roots = FALSE,
                                            label_leaves = FALSE,
-                                           group_label_size = 4,
-)  + theme(legend.position = "right")
+                                           group_label_size = 1) + theme(
+                                             legend.text = element_text(size = 15)
+                                           ) + theme(legend.position = "none") + theme(plot.title = element_text(hjust = 0.5, size= 15, face = "bold"))
+
+# Add the title to the plot
+aldinger.clusters.trajectory <- aldinger.clusters.trajectory +
+  ggtitle(plot_title) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
 
 ggsave(aldinger.clusters.trajectory, height = 7, width = 9, 
        file="~/SeuratProject/Aldinger data analysis/Trajectory Analysis using Monocle3/Aldinger.Clusters.Trajectory.png")
@@ -481,7 +485,7 @@ plot_title <- "RL gene markers"
 # Add the title to the plot
 plotrl <- aldinger_02RL_genes_only +
   ggtitle(plot_title) +
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+  theme(plot.title = element_text(hjust = 0.5, size= 15, face = "bold"))
 
 ggsave(plotrl, height = 7, width = 9, 
        file="~/SeuratProject/Aldinger data analysis/Trajectory Analysis using Monocle3/MarkerGenes_02RL.png")
@@ -496,12 +500,12 @@ ggsave(aldinger_02RL_genes_only, height = 7, width = 9,
 aldinger.03GCP.genes <- c("PAX6","RBFOX3","PTPRK","MKI67","DCC","RELN")
 aldinger_03GCP_genes <- plot_cells(cds_aldinger,genes=aldinger.03GCP.genes,label_cell_groups=FALSE,show_trajectory_graph=FALSE)
 # Set the plot title
-plot_title <- "GCP gene markers"
+plot_title <- "GCP and GN gene markers"
 
 # Add the title to the plot
 plotgcp <- aldinger_03GCP_genes +
   ggtitle(plot_title) +
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+  theme(plot.title = element_text(hjust = 0.5, size= 15, face = "bold"))
 ggsave(plotgcp, height = 7, width = 9, 
        file="~/SeuratProject/Aldinger data analysis/Trajectory Analysis using Monocle3/MarkerGenes_03GCP.png")
 
@@ -520,7 +524,7 @@ ggsave(plotgn, height = 7, width = 9,
 
 # 05-eCN-UBC *DOES NOT EXPRESS MKI67*
   # eCNs express LMX1A but not EOMES, UBCs express both LMX1A and EOMES. Aldingers paper was unable to discriminate eCNs and UBCs.
-aldinger.05eCNUBC.genes <- c("PAX6", "LMX1A","EOMES","MKI67")
+aldinger.05eCNUBC.genes <- c("PAX6", "LMX1A","EOMES","MKI67","TBR2")
 aldinger_05eCNUBC_genes <- plot_cells(cds_aldinger,genes=aldinger.05eCNUBC.genes,label_cell_groups=FALSE,show_trajectory_graph=FALSE)
 # Set the plot title
 plot_title <- "eCN/UBC gene markers"
@@ -528,13 +532,14 @@ plot_title <- "eCN/UBC gene markers"
 # Add the title to the plot
 plotecnubc <- aldinger_05eCNUBC_genes +
   ggtitle(plot_title) +
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+  theme(plot.title = element_text(hjust = 0.5, size= 15, face = "bold"))
 ggsave(plotecnubc, height = 7, width = 9, 
        file="~/SeuratProject/Aldinger data analysis/Trajectory Analysis using Monocle3/MarkerGenes_05eCNUBC.png")
 
 # Save the final plots 
 library(cowplot)
-grid_aldinger_trajectory <- plot_grid(aldinger.clusters.trajectory,Aldinger_Pseudotime_Trajectory, labels=c("a","b"),nrow = 1)
+grid_aldinger_trajectory <- plot_grid(aldinger.clusters.trajectory,Aldinger_Pseudotime_Trajectory, labels=c("b","c"), label_size = 20, nrow = 1)
+
 ggsave(grid_aldinger_trajectory, height = 6, width = 16, 
        file="~/SeuratProject/Aldinger data analysis/Trajectory Analysis using Monocle3/Grid_Aldinger_Trajectory.png") 
 
@@ -542,23 +547,23 @@ grid_aldinger_trajectory_markers <- plot_grid(plotrl, plotgcp, plotgn, plotecnub
 ggsave(grid_aldinger_trajectory_markers, height = 10, width = 14, 
        file="~/SeuratProject/Aldinger data analysis/Trajectory Analysis using Monocle3/Aldinger_Trajectory_Markers.png") 
 
-final <- plot_grid(plotrl, plotgcp, plotgn, plotecnubc, labels = c("a","b","c","d"), nrow = 2, rel_heights = c(1.1,1))
+final <- plot_grid(plotrl, plotgcp, plotecnubc, labels = c("d","e","f"), nrow = 1, rel_widths = c(1.3,1.3,1), label_size = 20)
 ggsave(final, height = 10, width = 12, 
        file="~/SeuratProject/Aldinger data analysis/Trajectory Analysis using Monocle3/Grid_Aldinger_Trajectory_Markers.png") 
 
-grid_aldinger_trajectory_all <- plot_grid(grid_aldinger_trajectory,grid_aldinger_all_trajectory_markers,labels = c(" "," "),nrow=2,rel_widths =c(1,2))
+grid_aldinger_trajectory_all <- plot_grid(grid_aldinger_trajectory,final,labels = c(" "," "),nrow=2,rel_widths =c(1,2))
 ggsave(grid_aldinger_trajectory_all, height = 12, width = 13, 
        file="~/SeuratProject/Aldinger data analysis/Trajectory Analysis using Monocle3/Grid_Aldinger_Trajectory_ALL.png") 
 
 # Project metagene to trajectory plot
-meta.g4 <- plot_cells(cds_aldinger,
+meta.g4<- plot_cells(cds_aldinger,
                       color_cells_by = "group4_metagene",
                       label_cell_groups=FALSE,
                       label_leaves=FALSE,
                       label_branch_points=FALSE,
                       graph_label_size=1.5,
                       cell_stroke = 0.1,
-                      scale_to_range = F, cell_size = 1, alpha = 0.1) + 
+                      scale_to_range = F, cell_size = 2, alpha = 0.1) + 
   scale_colour_gradient2(
     low = "white",
     mid = "white",
@@ -660,4 +665,44 @@ ggsave(metagenes, height=14,width=22,file="~/SeuratProject/Aldinger data analysi
 all_projection <- plot_grid(final.aldinger.dimplot.all,metagenes, labels = F, ncol = 2, nrow = 1, rel_widths = c(1.2,1))
 
 ggsave(all_projection, height=16,width=32,file="~/SeuratProject/Aldinger data analysis/Metagene projection/Grid_Aldinger_Projection_And_Trajectory.VPFP.png")
+
+########### Figures to put in dissertation ##########
+test1 <- plot_grid(p1, grid_aldinger_trajectory, labels = c("a"," "), label_size=20, nrow=1, rel_widths = c(1,2.2))
+test <- plot_grid(test1, final, nrow=2)
+ggsave(test, height=15, width=24, file="~/SeuratProject/Aldinger data analysis/Dissplots/Dissplots1.png")
+
+dissplot_trajectory <- plot_grid(aldinger.clusters.trajectory, Aldinger_Pseudotime_Trajectory, nrow = 1, labels = c("j","k"))
+
+dissplot_markers <- plot_grid(plotrl, plotgcp, plotecnubc, nrow=1, labels = c("l","m","n"))
+
+dissplot_a <- plot_grid(dissplot_trajectory, dissplot_markers, nrow=2, rel_heights = c(0.8,1))
+
+plot_grid(aldinger.dimplot.all,grid_aldinger_vp_projection) -> final.aldinger.dimplot.all
+
+dissplot_all <- plot_grid(final.aldinger.dimplot.all, dissplot_a, nrow=2)#, rel_heights = c(1.6,1))
+
+ggsave(dissplot_all, height=23, width=18, file="~/SeuratProject/Aldinger data analysis/Dissplots/Dissplots1_Aldinger.png")
+
+# Poster figures
+aldinger.dimplot.poster <- DimPlot(object = subset.cbl, group.by = "figure_clusters", label=F, label.size = 5) +theme(
+  legend.text = element_text(size = 20)
+)
+
+poster1 <- plot_grid(aldinger.clusters.trajectory, aldinger.dimplot.poster,aldinger.clusters.trajectory,nrow=1, labels = c("a","b"," "), rel_widths = c(1,1.4,0.3))
+                     
+poster2 <- plot_grid(aldinger_gr3_featureplot,
+                     aldinger_gr4_featureplot,
+                     aldinger_shh_featureplot,
+                     aldinger_wnt_featureplot, nrow = 1, rel_widths = c(1,1,1,1,1), labels = c("c"))
+
+ggsave(poster1, height=7, width=16, file="~/SeuratProject/Aldinger data analysis/Dissplots/1Poster_Dissplots1_Aldinger.png")
+ggsave(poster2, height=5, width=20, file="~/SeuratProject/Aldinger data analysis/Dissplots/2Poster_Dissplots1_Aldinger.png")
+
+# Find markers
+aldinger.markers <- FindAllMarkers(subset.cbl, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+aldinger.markers %>%
+  group_by(cluster) %>%
+  top_n(n = 50, wt = avg_log2FC) -> top10
+
+write.table(aldinger.markers, file = "~/SeuratProject/Aldinger data analysis/Subset/markers.tsv", sep = "\t", row.names = FALSE)
 

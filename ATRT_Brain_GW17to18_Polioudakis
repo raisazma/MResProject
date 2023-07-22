@@ -1,0 +1,868 @@
+# Atlas of developing human brain at mid-gestation (GW 17-18) 
+# https://www.cell.com/neuron/fulltext/S0896-6273(19)30561-6?_returnURL=https%3A%2F%2Flinkinghub.elsevier.com%2Fretrieve%2Fpii%2FS0896627319305616%3Fshowall%3Dtrue
+
+library(Matrix)
+library(Seurat)
+
+# This is the finished object. Read this script below to skip running all script.
+# seurat_obj <- readRDS(file="~/SeuratProject2/ATRT_Polioudakis/seurat_obj.rds")
+
+# Load the raw counts matrix
+load("~/SeuratProject2/ATRT_Polioudakis/raw_counts_mat.rdata")
+raw.counts.mat <- as(raw_counts_mat, "matrix")
+
+# Create a Seurat object with raw counts
+seurat_obj <- CreateSeuratObject(counts = raw.counts.mat)
+
+# Read the cell metadata from the CSV file
+cell_metadata <- read.csv("~/SeuratProject2/ATRT_Polioudakis/cell_metadata.csv", row.names = 1)
+
+# Add the cell metadata to the Seurat object
+seurat_obj <- AddMetaData(seurat_obj, metadata = cell_metadata)
+seurat_obj@meta.data
+
+# Create an object of chosen clusters
+chosen.clusters <- c("ExDp1","ExDp2","ExM","ExM-U","ExN","InCGE","InMGE","IP","OPC","oRG","Per","PgG2M","PgS","vRG")
+
+### subset the columns of this large seurat object to give only the cluster we want
+seurat_obj <- seurat_obj[,seurat_obj$Cluster%in%chosen.clusters]
+
+# Create an object of chosen subclusters
+chosen.subclusters <- c("ExDpl_0","ExDpl_1","ExDpl_2","ExDpl_3","ExDp2_0","ExDp2_1","ExM_0",
+                        "ExM_1","ExM_2","ExM_3","ExM_4","ExM_5","ExM_6","ExM_7","ExM-U_O","ExM-U_1","ExM-U_2",
+                        "ExM-U_3","ExM-U_4","ExM-U_5","ExN_O","ExN_1","ExN_2","ExN_3","ExN_4","ExN_5","ExN_6","ExN_7",
+                        "INCGE_O","INCGE_1","INCGE_2","INCGE_3","INCGE_4","INCGE_5","INMGE_O","INMGE_1","INMGE_2","INMGE_3","INMGE_4","INMGE_5","INMGE_6",
+                        "INMGE_7","IP_O","IP_1","IP_2","IP_3","OPC_0","OPC_1","OPC_2","OPC_3","OPC_4","OPC_5","oRG_0","oRG_1",
+                        "oRG_2","oRG_3","oRG_4","PgG2M_0","PgG2M_1","PgG2M_2","PgG2M_3","PgG2M_4","PgS_0","PgS_1","PgS_2",
+                        "PgS_3","PgS_4","vRG_0","vRG_1","vRG_2","vRG_3")
+
+### subset the columns of this large seurat object to give only the cluster we want
+seurat_obj <- seurat_obj[,seurat_obj$Subcluster%in%chosen.subclusters]
+
+# Set the default assay
+DefaultAssay(seurat_obj) <- "RNA"
+
+# Perform quality control
+seurat_obj[["percent.mt"]] <- PercentageFeatureSet(seurat_obj, pattern = "^MT-")
+
+# Show QC metrics for the first 5 cells
+head(seurat_obj@meta.data, 5)
+
+# Visualize QC metrics as a violin plot
+Polioudakis.qc.metrics <- VlnPlot(seurat_obj, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, group.by="Cluster", pt.size=0)
+Polioudakis.qc.metrics1 <- VlnPlot(seurat_obj, features = c("nFeature_RNA"), group.by="Cluster", pt.size=0)
+Polioudakis.qc.metrics2 <- VlnPlot(seurat_obj, features = c("nCount_RNA"), group.by="Cluster", pt.size=0)
+Polioudakis.qc.metrics3 <- VlnPlot(seurat_obj, features = c("percent.mt"), group.by="Cluster", pt.size=0)
+ggsave(Polioudakis.qc.metrics, height = 14, width = 21, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Basic Seurat/Polioudakis_QC_Metrics.png")
+
+# Visualize QC metrics as a violin plot
+Polioudakis.qc.metrics_2 <- VlnPlot(seurat_obj, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, group.by="Subcluster", pt.size=0)
+Polioudakis.qc.metrics1_2 <- VlnPlot(seurat_obj, features = c("nFeature_RNA"), group.by="Subcluster", pt.size=0)
+Polioudakis.qc.metrics2_2 <- VlnPlot(seurat_obj, features = c("nCount_RNA"), group.by="Subcluster", pt.size=0)
+Polioudakis.qc.metrics3_2 <- VlnPlot(seurat_obj, features = c("percent.mt"), group.by="Subcluster", pt.size=0)
+ggsave(Polioudakis.qc.metrics_2, height = 14, width = 21, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Basic Seurat/2Polioudakis_QC_Metrics.png")
+
+# Feature scatter to visualize feature-feature relationships
+FeatureScatter(seurat_obj, feature1 = "nCount_RNA", feature2 = "nFeature_RNA") + geom_smooth(method = 'lm')
+plot1 <- FeatureScatter(seurat_obj, feature1 = "nCount_RNA", feature2 = "percent.mt",  group.by="Cluster")
+plot2 <- FeatureScatter(seurat_obj, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", group.by="Cluster")
+Polioudakis.featurerelationships <- plot1 + plot2 
+ggsave(Polioudakis.featurerelationships, height = 14, width = 21, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Basic Seurat/Polioudakis_nCount_nFeature_relationship.png")
+
+# Feature scatter to visualize feature-feature relationships
+FeatureScatter(seurat_obj, feature1 = "nCount_RNA", feature2 = "nFeature_RNA") + geom_smooth(method = 'lm')
+plot1_2 <- FeatureScatter(seurat_obj, feature1 = "nCount_RNA", feature2 = "percent.mt",  group.by="Subcluster")
+plot2_2 <- FeatureScatter(seurat_obj, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", group.by="Subcluster")
+Polioudakis.featurerelationships_2 <- plot1_2 + plot2_2
+ggsave(Polioudakis.featurerelationships_2, height = 14, width = 21, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Basic Seurat/2Polioudakis_nCount_nFeature_relationship.png")
+
+# Set cutoff parameters
+seurat_obj <- subset(seurat_obj, subset = nFeature_RNA > 200 & nFeature_RNA < 2500 & percent.mt < 10)
+
+# Normalise data
+seurat_obj <- NormalizeData(seurat_obj)
+
+# Run FindVariableFeatures with the "vst" method
+seurat_obj <- FindVariableFeatures(seurat_obj, selection.method = "vst", nfeatures = 2000)
+
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(seurat_obj), 10)
+
+# plot variable features with and without labels
+plot1Polioudakis <- VariableFeaturePlot(seurat_obj) + theme_classic()
+plot2Polioudakis <- LabelPoints(plot = plot1Polioudakis, points = top10, repel = TRUE, xnudge = 0,ynudge=0) + theme_classic()
+plot1plot2 <- plot_grid(plot1Polioudakis,plot2Polioudakis,nrow=1)
+ggsave(plot1Polioudakis+plot2Polioudakis, height = 10, width = 10, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Basic Seurat/Polioudakis_VariableFeatures.png")
+
+# Scale data prior to performing dimensionality reduction
+seurat_obj <- ScaleData(seurat_obj)
+
+# perform linear dimensional reduction
+seurat_obj <- RunPCA(seurat_obj, features = VariableFeatures(object = seurat_obj))
+
+# Examine and visualize PCA results a few different ways
+print(seurat_obj[["pca"]], dims = 1:5, nfeatures = 5)
+
+# Visualise PCA
+# VizDimLoadings
+Polioudakis_vizdimloadings <- VizDimLoadings(seurat_obj, dims = 1:2)
+ggsave(Polioudakis_vizdimloadings, height=8, width=10,file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Basic Seurat/Polioudakis_Vizdimloadings.png")
+
+# DimPlot
+Polioudakis_pca <- DimPlot(seurat_obj, reduction = "pca")
+ggsave(Polioudakis_pca, height=10,width=11,file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Basic Seurat/Polioudakis_PCA.png")
+
+# Heatmap
+png(file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Basic Seurat/Polioudakis_PCAHeatmap.png", height = 20, width = 20, units = "cm", res = 300)
+DimHeatmap(seurat_obj, dims = 1:9, cells = 500, balanced = TRUE)
+dev.off()
+graphics.off()
+
+### Determine the ‘dimensionality’ of the dataset
+Polioudakis_elbowplot <- ElbowPlot(seurat_obj) + theme_classic()
+ggsave(Polioudakis_elbowplot, height=7,width=8,file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Basic Seurat/Polioudakis_ElbowPlot.png")
+
+# Cluster the cells
+seurat_obj <- FindNeighbors(seurat_obj, dims = 1:15)
+seurat_obj <- FindClusters(seurat_obj, resolution = 0.5)
+
+# Look at cluster IDs of the first 5 cells
+head(Idents(seurat_obj), 5)
+
+# Perform non-linear dimensional reduction
+seurat_obj <- RunUMAP(seurat_obj, dims = 1:10)
+p1_x <- DimPlot(seurat_obj, reduction = "umap", label = T, group.by = "Cluster")
+p2 <- DimPlot(seurat_obj, reduction = "umap", label = T)
+Polioudakis_umap <- p1+p2
+ggsave(Polioudakis_umap, width = 23, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Basic Seurat/Polioudakis_UMAP.png")
+
+# Perform non-linear dimensional reduction
+p1_2 <- DimPlot(seurat_obj, reduction = "umap", label = T, group.by = "Subcluster")
+p2 <- DimPlot(seurat_obj, reduction = "umap", label = T)
+Polioudakis_umap_2 <- p1_2+p2
+ggsave(Polioudakis_umap_2, width = 23, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Basic Seurat/2Polioudakis_UMAP.png")
+
+all_umap <- plot_grid(p1,p1_2, ncol=1)
+ggsave(all_umap, width=20, height=17, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Basic Seurat/1_2_Polioudakis_UMAP.png")
+
+##### SAVE ALL OBJECTS ######
+library(cowplot)
+grid_Polioudakis_qcmetrics <- plot_grid(Polioudakis.qc.metrics1, Polioudakis.qc.metrics2, Polioudakis.qc.metrics3,labels=c("a"," "," "), nrow=1)
+
+grid_Polioudakis_dimreduct <- plot_grid(Polioudakis_elbowplot, Polioudakis_pca, labels=c("c","d"), nrow=1) 
+
+grid_Polioudakis_dimreduct2 <- plot_grid(p1,p2,labels=c("e","f"),nrow=1)
+
+grid_all_Polioudakis <- plot_grid(grid_Polioudakis_qcmetrics, grid_Polioudakis_dimreduct, grid_Polioudakis_dimreduct2, labels=c(" ",""," "),nrow = 3)
+
+ggsave(grid_all_Polioudakis, height=25, width=20, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Basic Seurat/grid_all_Polioudakis.png")
+
+grid_Polioudakis_qcmetrics_2 <- plot_grid(Polioudakis.qc.metrics1_2, Polioudakis.qc.metrics2_2, Polioudakis.qc.metrics3_2,labels=c("a"," "," "), nrow=1)
+
+grid_Polioudakis_dimreduct <- plot_grid(Polioudakis_elbowplot, Polioudakis_pca, labels=c("c","d"), nrow=1) 
+
+grid_Polioudakis_dimreduct2_2 <- plot_grid(p1_2,p2,labels=c("e","f"),nrow=1)
+
+grid_all_Polioudakis_2 <- plot_grid(grid_Polioudakis_qcmetrics_2, grid_Polioudakis_dimreduct, grid_Polioudakis_dimreduct2_2, labels=c(" ",""," "),nrow = 3)
+
+ggsave(grid_all_Polioudakis_2, height=25, width=20, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Basic Seurat/2grid_all_Polioudakis.png")
+
+#################### PROJECTION ####################
+# Install and load libraries
+library("NMF")
+library("MASS")
+library(biomaRt)
+
+# Extract the values for the projection
+DefaultAssay(object = seurat_obj) <- "RNA"
+
+# Extract the normalised count data
+tpms.mat.in <- as.data.frame(seurat_obj[["RNA"]]@scale.data)
+
+ensembl_IDs <- rownames(tpms.mat.in)
+
+mart <- useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", host="https://useast.ensembl.org")
+
+symbols <- getBM(attributes = c("hgnc_symbol", "ensembl_gene_id"),  
+                 filters = "hgnc_symbol",
+                 ensembl_IDs,
+                 mart = mart)
+
+annotatedix  <- match(ensembl_IDs, symbols$hgnc_symbol)
+symbols[annotatedix,]  ->  annotatedGenes
+tpms.mat.in$ensembl_gene_id <- annotatedGenes$ensembl_gene_id
+
+#Remove duplicated rows using:
+tpms.mat.in <- tpms.mat.in[!duplicated(tpms.mat.in$ensembl_gene_id),]  
+
+#Remove transcripts with no gene annotation using:
+tpms.mat.in <- na.omit(tpms.mat.in)
+
+#Set gene IDs as rownames and remove column:
+rownames(tpms.mat.in) <- tpms.mat.in$ensembl_gene_id
+tpms.mat.in$ensembl_gene_id <- NULL
+
+# Load required data objects
+nmf.res <- readRDS(file = "/home/raisaa/SeuratProject2/nmf.res.atrt.rds")
+
+# Load sample data as matrix object
+source(file = "/home/raisaa/Group3-4App-main/StarProtocols_Guide/R/Project_NMF.R")
+
+# Project NMF model to sequencing data
+tpms.mat <- project.NMF(input.array = as.matrix(tpms.mat.in), nmf.result = nmf.res)
+
+# Rows 3 in tpms.mat correspond to the ATRT metagene, extract them from the data and transpose matrix
+atrt.tpms <- t(tpms.mat[c(3),]) 
+
+# Apply logistic transformation to metagenes
+logistic.atrt.tpms <- apply(atrt.tpms,2,function(x){(1 / (1 + exp(-x)))}) 
+
+# Present output as data frame for export
+logistic.atrt.tpms <- as.data.frame(logistic.atrt.tpms)
+data.frame(logistic.atrt.tpms)
+
+# Projected results, map them back onto the seurat object
+logistic.atrt.tpms -> seurat_obj$logistic.atrt.tpms
+as.numeric(tpms.mat[3,]) -> seurat_obj$ATRT_metagene
+
+# Plot violin plots for each metagenes
+Polioudakis_atrt_violinplot<- VlnPlot(seurat_obj, features = "ATRT_metagene", group.by="Cluster", pt.size=0)
+Polioudakis_dimplot<- DimPlot(object = seurat_obj, label = T, group.by = "Cluster")
+Polioudakis_atrt_featureplot <- FeaturePlot(object = seurat_obj,  "ATRT_metagene", min.cutoff = 0, label = T)
+
+ggsave(Polioudakis_atrt_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/FP_Projection.png")
+ggsave(Polioudakis_atrt_violinplot, width = 13, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/VP_Projection.png")
+
+Polioudakis_atrt_violinplot_2 <- VlnPlot(seurat_obj, features = "ATRT_metagene", group.by="Subcluster", pt.size=0) +theme(legend.position = "none")
+Polioudakis_dimplot_2 <- DimPlot(object = seurat_obj, label = T, group.by = "Subcluster", label.size = 3.7)
+Polioudakis_atrt_featureplot_2 <- FeaturePlot(object = seurat_obj,  "ATRT_metagene", min.cutoff = 0, label = T, label.size = 4)
+
+ggsave(Polioudakis_atrt_featureplot_2, width = 10, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/2FP_Projection.png")
+ggsave(Polioudakis_atrt_violinplot_2, width = 22, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/2VP_Projection.png")
+
+#################### SUBGROUP PROJECTION ####################
+# Load required data objects
+nmf.res <- readRDS(file = "/home/raisaa/SeuratProject2/nmf.res.atrt.subgrp.rds")
+
+# Load sample data as matrix object
+source(file = "/home/raisaa/Group3-4App-main/StarProtocols_Guide/R/Project_NMF.R")
+
+# Project NMF model to sequencing data
+tpms.mat <- project.NMF(input.array = as.matrix(tpms.mat.in), nmf.result = nmf.res)
+
+# Rows 3 in tpms.mat correspond to the ATRT metagene, extract them from the data and transpose matrix
+atrt.tpms <- t(tpms.mat[c(3,2,1),]) 
+
+# Apply logistic transformation to metagenes
+logistic.atrt.tpms <- apply(atrt.tpms,2,function(x){(1 / (1 + exp(-x)))}) 
+
+# Present output as data frame for export
+logistic.atrt.tpms <- as.data.frame(logistic.atrt.tpms)
+data.frame(logistic.atrt.tpms)
+
+# Projected results, map them back onto the seurat object
+# logistic.atrt.tpms -> seurat_obj$logistic.atrt.tpms
+as.numeric(tpms.mat[3,]) -> seurat_obj$SHH_metagene
+as.numeric(tpms.mat[2,]) -> seurat_obj$MYC_metagene
+as.numeric(tpms.mat[1,]) -> seurat_obj$TYR_metagene
+
+# Plot violin plots for each metagenes
+Polioudakis_shh_violinplot <- VlnPlot(seurat_obj, features = "SHH_metagene", group.by="Cluster", pt.size=0)
+Polioudakis_myc_violinplot <- VlnPlot(seurat_obj, features = "MYC_metagene", group.by="Cluster", pt.size=0)
+Polioudakis_tyr_violinplot <- VlnPlot(seurat_obj, features = "TYR_metagene", group.by="Cluster", pt.size=0)
+
+Polioudakis_shh_featureplot <- FeaturePlot(object = seurat_obj,  "SHH_metagene", cols = c("grey","green"), min.cutoff = 0.6, label = T)
+Polioudakis_myc_featureplot <- FeaturePlot(object = seurat_obj, "MYC_metagene", cols = c("grey","yellow"), min.cutoff = 0.6, label = T)
+Polioudakis_tyr_featureplot <- FeaturePlot(object = seurat_obj, "TYR_metagene", cols = c("grey","red"),min.cutoff=0.6, label = T)
+
+ggsave(Polioudakis_shh_violinplot, width = 13, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/VP_shhProjection.png")
+ggsave(Polioudakis_myc_violinplot, width = 13, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/VP_mycProjection.png")
+ggsave(Polioudakis_tyr_violinplot, width = 13, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/VP_tyrProjection.png")
+VP_All_Polioudakis <- plot_grid(Polioudakis_atrt_violinplot,Polioudakis_shh_violinplot,Polioudakis_myc_violinplot,Polioudakis_tyr_violinplot, ncol=2, nrow=2, rel_widths = c(1,1.3)) +theme(legend.position = "none")
+ggsave(VP_All_Polioudakis,  width = 14, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/VP_All_Projection.png")
+
+ggsave(Polioudakis_shh_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/FP_shhProjection.png")
+ggsave(Polioudakis_myc_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/FP_mycProjection.png")
+ggsave(Polioudakis_tyr_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/FP_tyrProjection.png")
+FP_All_Polioudakis <- plot_grid(Polioudakis_atrt_featureplot,Polioudakis_shh_featureplot,Polioudakis_myc_featureplot,Polioudakis_tyr_featureplot, ncol=2, nrow=2) +theme(legend.position = "right")
+ggsave(FP_All_Polioudakis,  width = 14, height = 13, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/FP_All_Projection.png")
+
+ggsave(FP_All_Polioudakis+VP_All_Polioudakis, width = 28, height = 13, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/FP_VP_All_Projection.png")
+
+# Plot violin plots for each metagenes (subcluster)
+Polioudakis_shh_violinplot_2 <- VlnPlot(seurat_obj, features = "SHH_metagene", group.by="Subcluster", pt.size=0) +theme(legend.position = "none")
+Polioudakis_myc_violinplot_2 <- VlnPlot(seurat_obj, features = "MYC_metagene", group.by="Subcluster", pt.size=0) +theme(legend.position = "none")
+Polioudakis_tyr_violinplot_2 <- VlnPlot(seurat_obj, features = "TYR_metagene", group.by="Subcluster", pt.size=0) +theme(legend.position = "none")
+
+# Plot violin plots for each metagenes (seurat_clusters)
+Polioudakis_shh_violinplot3 <- VlnPlot(seurat_obj, features = "SHH_metagene") + theme(legend.position = "none")   
+Polioudakis_myc_violinplot3 <- VlnPlot(seurat_obj, features = "MYC_metagene", group.by = "seurat_clusters") +  theme(legend.position = "none")  
+Polioudakis_tyr_violinplot3 <- VlnPlot(seurat_obj, features = "TYR_metagene", group.by = "seurat_clusters") + theme(legend.position = "none")   
+Polioudakis_atrt_violinplot3 <- VlnPlot(seurat_obj, features = "ATRT_metagene", group.by = "seurat_clusters") + theme(legend.position = "none")   
+
+Polioudakis_shh_featureplot <- FeaturePlot(object = seurat_obj,  "SHH_metagene", cols = c("grey","green"), min.cutoff = 0.6, label = T)
+Polioudakis_myc_featureplot <- FeaturePlot(object = seurat_obj, "MYC_metagene", cols = c("grey","yellow"), min.cutoff = 0.6, label = T)
+Polioudakis_tyr_featureplot <- FeaturePlot(object = seurat_obj, "TYR_metagene", cols = c("grey","red"),min.cutoff=0.6, label = T)
+
+ggsave(Polioudakis_shh_violinplot_2, width = 13, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/2VP_shhProjection.png") 
+ggsave(Polioudakis_myc_violinplot_2, width = 13, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/2VP_mycProjection.png") 
+ggsave(Polioudakis_tyr_violinplot_2, width = 13, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/2VP_tyrProjection.png") 
+VP_All_Polioudakis_2 <- plot_grid(Polioudakis_atrt_violinplot_2,Polioudakis_shh_violinplot_2,Polioudakis_myc_violinplot_2,Polioudakis_tyr_violinplot_2, ncol=2, nrow=2, rel_widths = c(1,1.3)) +theme(legend.position = "right")
+ggsave(VP_All_Polioudakis_2,width = 14, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/2VP_All_Projection.png")
+
+ggsave(Polioudakis_shh_violinplot3, width = 13, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/3_VP_shhProjection.png") 
+ggsave(Polioudakis_myc_violinplot3, width = 13, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/3_VP_mycProjection.png")
+ggsave(Polioudakis_tyr_violinplot3, width = 13, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/3_VP_tyrProjection.png")
+VP_All_Polioudakis3 <- plot_grid(Polioudakis_atrt_violinplot3,Polioudakis_shh_violinplot3,Polioudakis_myc_violinplot3,Polioudakis_tyr_violinplot3, ncol=2, nrow=2) +theme(legend.position = "right")
+ggsave(VP_All_Polioudakis3,  width = 14, height = 12, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/3_VP_All_Projection.png")
+
+ggsave(Polioudakis_shh_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/FP_shhProjection.png")
+ggsave(Polioudakis_myc_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/FP_mycProjection.png")
+ggsave(Polioudakis_tyr_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/FP_tyrProjection.png")
+FP_All_Polioudakis <- plot_grid(Polioudakis_atrt_featureplot,Polioudakis_shh_featureplot,Polioudakis_myc_featureplot,Polioudakis_tyr_featureplot, ncol=2, nrow=2) +theme(legend.position = "right")
+ggsave(FP_All_Polioudakis,  width = 14, height = 13, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/FP_All_Projection.png")
+
+ggsave(FP_All_Polioudakis+VP_All_Polioudakis_2, width = 28, height = 13, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/2FP_VP_All_Projection.png")
+
+dimplots <- plot_grid(p1,p1_2, nrow=1)
+fp_dimplots <- plot_grid(dimplots,FP_All_Polioudakis, nrow=1, rel_widths = c(1.6,1))
+vps <- plot_grid(VP_All_Polioudakis, VP_All_Polioudakis_2, nrow=1, rel_widths = c(1,2.5))
+complete <- plot_grid(dimplots,FP_All_Polioudakis,VP_All_Polioudakis, VP_All_Polioudakis_2, nrow=4)
+
+ggsave(fp_dimplots, width = 36, height = 16, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/COMPLETE_FPDIMPLOTS.png")
+ggsave(vps, width = 36, height = 14, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/COMPLETE_VPs.png")
+ggsave(complete, width = 14, height = 22, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/COMPLETE.png")
+
+#saveRDS(seurat_obj, file="~/SeuratProject2/ATRT_Polioudakis/seurat_obj.rds")
+
+############################# BRAIN DATA WITHOUT THE NEURONS ##############################
+#scrnaseq of the developing human neocortex at mid-gestation (gw 17 to GW18) 
+# https://www.cell.com/neuron/fulltext/S0896-6273(19)30561-6?_returnURL=https%3A%2F%2Flinkinghub.elsevier.com%2Fretrieve%2Fpii%2FS0896627319305616%3Fshowall%3Dtrue
+# opc (oligodendrocyte prog cell), exdp (excitatory deep layer), PgG2M (cycling progenitors), ventricular radial glia (vRG), incge (intneuron caudal ganglionic eminence), IP (intermediate progenitor)
+
+library(Matrix)
+library(Seurat)
+
+# saveRDS(seurat_obj, file="~/SeuratProject2/ATRT_Polioudakis/seurat_obj.rds")
+#seurat_obj <- readRDS(file="~/SeuratProject2/ATRT_Polioudakis/seurat_obj.rds")
+
+# Load the raw counts matrix
+load("~/SeuratProject2/ATRT_Polioudakis/raw_counts_mat.rdata")
+raw.counts.mat <- as(raw_counts_mat, "matrix")
+
+# Create a Seurat object with raw counts
+seurat_obj <- CreateSeuratObject(counts = raw.counts.mat)
+
+# Read the cell metadata from the CSV file
+cell_metadata <- read.csv("~/SeuratProject2/ATRT_Polioudakis/cell_metadata.csv", row.names = 1)
+
+# Add the cell metadata to the Seurat object
+seurat_obj <- AddMetaData(seurat_obj, metadata = cell_metadata)
+seurat_obj@meta.data
+
+# Create an object of chosen clusters
+chosen.clusters <- c("IP","OPC","oRG","Per","PgG2M","PgS","vRG")
+
+### subset the columns of this large seurat object to give only the cluster we want
+seurat_obj <- seurat_obj[,seurat_obj$Cluster%in%chosen.clusters]
+
+# Create an object of chosen subclusters
+chosen.subclusters <- c(
+                        "INCGE_O","INCGE_1","INCGE_2","INCGE_3","INCGE_4","INCGE_5","INMGE_O","INMGE_1","INMGE_2","INMGE_3","INMGE_4","INMGE_5","INMGE_6",
+                        "INMGE_7","IP_O","IP_1","IP_2","IP_3","OPC_0","OPC_1","OPC_2","OPC_3","OPC_4","OPC_5","oRG_0","oRG_1",
+                        "oRG_2","oRG_3","oRG_4","PgG2M_0","PgG2M_1","PgG2M_2","PgG2M_3","PgG2M_4","PgS_0","PgS_1","PgS_2",
+                        "PgS_3","PgS_4","vRG_0","vRG_1","vRG_2","vRG_3")
+
+### subset the columns of this large seurat object to give only the cluster we want
+seurat_obj <- seurat_obj[,seurat_obj$Subcluster%in%chosen.subclusters]
+
+# Set the default assay
+DefaultAssay(seurat_obj) <- "RNA"
+
+# Perform quality control
+seurat_obj[["percent.mt"]] <- PercentageFeatureSet(seurat_obj, pattern = "^MT-")
+
+# Show QC metrics for the first 5 cells
+head(seurat_obj@meta.data, 5)
+
+# Visualize QC metrics as a violin plot
+Polioudakis.qc.metrics <- VlnPlot(seurat_obj, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, group.by="Cluster", pt.size=0)
+Polioudakis.qc.metrics1 <- VlnPlot(seurat_obj, features = c("nFeature_RNA"), group.by="Cluster", pt.size=0)
+Polioudakis.qc.metrics2 <- VlnPlot(seurat_obj, features = c("nCount_RNA"), group.by="Cluster", pt.size=0)
+Polioudakis.qc.metrics3 <- VlnPlot(seurat_obj, features = c("percent.mt"), group.by="Cluster", pt.size=0)
+ggsave(Polioudakis.qc.metrics, height = 14, width = 21, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Basic Seurat/Polioudakis_QC_Metrics.png")
+
+# Visualize QC metrics as a violin plot
+Polioudakis.qc.metrics_2 <- VlnPlot(seurat_obj, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, group.by="Subcluster", pt.size=0)
+Polioudakis.qc.metrics1_2 <- VlnPlot(seurat_obj, features = c("nFeature_RNA"), group.by="Subcluster", pt.size=0)
+Polioudakis.qc.metrics2_2 <- VlnPlot(seurat_obj, features = c("nCount_RNA"), group.by="Subcluster", pt.size=0)
+Polioudakis.qc.metrics3_2 <- VlnPlot(seurat_obj, features = c("percent.mt"), group.by="Subcluster", pt.size=0)
+ggsave(Polioudakis.qc.metrics_2, height = 14, width = 21, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Basic Seurat/2Polioudakis_QC_Metrics.png")
+
+# Feature scatter to visualize feature-feature relationships
+FeatureScatter(seurat_obj, feature1 = "nCount_RNA", feature2 = "nFeature_RNA") + geom_smooth(method = 'lm')
+plot1 <- FeatureScatter(seurat_obj, feature1 = "nCount_RNA", feature2 = "percent.mt",  group.by="Cluster")
+plot2 <- FeatureScatter(seurat_obj, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", group.by="Cluster")
+Polioudakis.featurerelationships <- plot1 + plot2 
+ggsave(Polioudakis.featurerelationships, height = 14, width = 21, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Basic Seurat/Polioudakis_nCount_nFeature_relationship.png")
+
+# Feature scatter to visualize feature-feature relationships
+FeatureScatter(seurat_obj, feature1 = "nCount_RNA", feature2 = "nFeature_RNA") + geom_smooth(method = 'lm')
+plot1_2 <- FeatureScatter(seurat_obj, feature1 = "nCount_RNA", feature2 = "percent.mt",  group.by="Subcluster")
+plot2_2 <- FeatureScatter(seurat_obj, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", group.by="Subcluster")
+Polioudakis.featurerelationships_2 <- plot1_2 + plot2_2
+ggsave(Polioudakis.featurerelationships_2, height = 14, width = 21, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Basic Seurat/2Polioudakis_nCount_nFeature_relationship.png")
+
+# Set cutoff parameters
+seurat_obj <- subset(seurat_obj, subset = nFeature_RNA > 200 & nFeature_RNA < 2500 & percent.mt < 10)
+
+# Normalise data
+seurat_obj <- NormalizeData(seurat_obj)
+
+# Run FindVariableFeatures with the "vst" method
+seurat_obj <- FindVariableFeatures(seurat_obj, selection.method = "vst", nfeatures = 2000)
+
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(seurat_obj), 10)
+
+# plot variable features with and without labels
+plot1Polioudakis <- VariableFeaturePlot(seurat_obj) + theme_classic()
+plot2Polioudakis <- LabelPoints(plot = plot1Polioudakis, points = top10, repel = TRUE, xnudge = 0,ynudge=0) + theme_classic()
+plot1plot2 <- plot_grid(plot1Polioudakis,plot2Polioudakis,nrow=1)
+ggsave(plot1Polioudakis+plot2Polioudakis, height = 10, width = 10, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Basic Seurat/Polioudakis_VariableFeatures.png")
+
+# Scale data prior to performing dimensionality reduction
+seurat_obj <- ScaleData(seurat_obj)
+
+# perform linear dimensional reduction
+seurat_obj <- RunPCA(seurat_obj, features = VariableFeatures(object = seurat_obj))
+
+# Examine and visualize PCA results a few different ways
+print(seurat_obj[["pca"]], dims = 1:5, nfeatures = 5)
+
+# Visualise PCA
+# VizDimLoadings
+Polioudakis_vizdimloadings <- VizDimLoadings(seurat_obj, dims = 1:2)
+ggsave(Polioudakis_vizdimloadings, height=8, width=10,file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Basic Seurat/Polioudakis_Vizdimloadings.png")
+
+# DimPlot
+Polioudakis_pca <- DimPlot(seurat_obj, reduction = "pca")
+ggsave(Polioudakis_pca, height=10,width=11,file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Basic Seurat/Polioudakis_PCA.png")
+
+# Heatmap
+png(file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Basic Seurat/Polioudakis_PCAHeatmap.png", height = 20, width = 20, units = "cm", res = 300)
+DimHeatmap(seurat_obj, dims = 1:9, cells = 500, balanced = TRUE)
+dev.off()
+graphics.off()
+
+### Determine the ‘dimensionality’ of the dataset
+Polioudakis_elbowplot <- ElbowPlot(seurat_obj) + theme_classic()
+ggsave(Polioudakis_elbowplot, height=7,width=8,file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Basic Seurat/Polioudakis_ElbowPlot.png")
+
+# Cluster the cells
+seurat_obj <- FindNeighbors(seurat_obj, dims = 1:15)
+seurat_obj <- FindClusters(seurat_obj, resolution = 0.5)
+
+# Look at cluster IDs of the first 5 cells
+head(Idents(seurat_obj), 5)
+
+# Perform non-linear dimensional reduction
+seurat_obj <- RunUMAP(seurat_obj, dims = 1:10)
+p1 <- DimPlot(seurat_obj, reduction = "umap", label = T, group.by = "Cluster")
+p2 <- DimPlot(seurat_obj, reduction = "umap", label = T)
+Polioudakis_umap <- p1+p2
+ggsave(Polioudakis_umap, width = 23, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Basic Seurat/Polioudakis_UMAP.png")
+
+# Perform non-linear dimensional reduction
+p1_2 <- DimPlot(seurat_obj, reduction = "umap", label = T, group.by = "Subcluster")
+p2 <- DimPlot(seurat_obj, reduction = "umap", label = T)
+Polioudakis_umap_2 <- p1_2+p2
+ggsave(Polioudakis_umap_2, width = 23, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Basic Seurat/2Polioudakis_UMAP.png")
+
+all_umap <- plot_grid(p1,p1_2, ncol=1)
+ggsave(all_umap, width=20, height=17, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Basic Seurat/1_2_Polioudakis_UMAP.png")
+
+##### SAVE ALL OBJECTS ######
+library(cowplot)
+grid_Polioudakis_qcmetrics <- plot_grid(Polioudakis.qc.metrics1, Polioudakis.qc.metrics2, Polioudakis.qc.metrics3,labels=c("a"," "," "), nrow=1)
+
+grid_Polioudakis_dimreduct <- plot_grid(Polioudakis_elbowplot, Polioudakis_pca, labels=c("c","d"), nrow=1) 
+
+grid_Polioudakis_dimreduct2 <- plot_grid(p1,p2,labels=c("e","f"),nrow=1)
+
+grid_all_Polioudakis <- plot_grid(grid_Polioudakis_qcmetrics, grid_Polioudakis_dimreduct, grid_Polioudakis_dimreduct2, labels=c(" ",""," "),nrow = 3)
+
+ggsave(grid_all_Polioudakis, height=25, width=20, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Basic Seurat/grid_all_Polioudakis.png")
+
+grid_Polioudakis_qcmetrics_2 <- plot_grid(Polioudakis.qc.metrics1_2, Polioudakis.qc.metrics2_2, Polioudakis.qc.metrics3_2,labels=c("a"," "," "), nrow=1)
+
+grid_Polioudakis_dimreduct <- plot_grid(Polioudakis_elbowplot, Polioudakis_pca, labels=c("c","d"), nrow=1) 
+
+grid_Polioudakis_dimreduct2_2 <- plot_grid(p1_2,p2,labels=c("e","f"),nrow=1)
+
+grid_all_Polioudakis_2 <- plot_grid(grid_Polioudakis_qcmetrics_2, grid_Polioudakis_dimreduct, grid_Polioudakis_dimreduct2_2, labels=c(" ",""," "),nrow = 3)
+
+ggsave(grid_all_Polioudakis_2, height=25, width=20, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Basic Seurat/2grid_all_Polioudakis.png")
+
+#################### PROJECTION ####################
+# Install and load libraries
+library("NMF")
+library("MASS")
+library(biomaRt)
+
+# Extract the values for the projection
+DefaultAssay(object = seurat_obj) <- "RNA"
+
+# Extract the normalised count data
+tpms.mat.in <- as.data.frame(seurat_obj[["RNA"]]@scale.data)
+
+ensembl_IDs <- rownames(tpms.mat.in)
+
+mart <- useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl")
+
+symbols <- getBM(attributes = c("hgnc_symbol", "ensembl_gene_id"),  
+                 filters = "hgnc_symbol",
+                 ensembl_IDs,
+                 mart = mart)
+
+annotatedix  <- match(ensembl_IDs, symbols$hgnc_symbol)
+symbols[annotatedix,]  ->  annotatedGenes
+tpms.mat.in$ensembl_gene_id <- annotatedGenes$ensembl_gene_id
+
+#Remove duplicated rows using:
+tpms.mat.in <- tpms.mat.in[!duplicated(tpms.mat.in$ensembl_gene_id),]  
+
+#Remove transcripts with no gene annotation using:
+tpms.mat.in <- na.omit(tpms.mat.in)
+
+#Set gene IDs as rownames and remove column:
+rownames(tpms.mat.in) <- tpms.mat.in$ensembl_gene_id
+tpms.mat.in$ensembl_gene_id <- NULL
+
+# Load required data objects
+nmf.res <- readRDS(file = "/home/raisaa/SeuratProject2/nmf.res.atrt.rds")
+
+# Load sample data as matrix object
+source(file = "/home/raisaa/Group3-4App-main/StarProtocols_Guide/R/Project_NMF.R")
+
+# Project NMF model to sequencing data
+tpms.mat <- project.NMF(input.array = as.matrix(tpms.mat.in), nmf.result = nmf.res)
+
+# Rows 3 in tpms.mat correspond to the ATRT metagene, extract them from the data and transpose matrix
+atrt.tpms <- t(tpms.mat[c(3),]) 
+
+# Apply logistic transformation to metagenes
+logistic.atrt.tpms <- apply(atrt.tpms,2,function(x){(1 / (1 + exp(-x)))}) 
+
+# Present output as data frame for export
+logistic.atrt.tpms <- as.data.frame(logistic.atrt.tpms)
+data.frame(logistic.atrt.tpms)
+
+# Projected results, map them back onto the seurat object
+logistic.atrt.tpms -> seurat_obj$logistic.atrt.tpms
+as.numeric(tpms.mat[3,]) -> seurat_obj$ATRT_metagene
+
+# Plot violin plots for each metagenes
+Polioudakis_atrt_violinplotX <- VlnPlot(seurat_obj, features = "ATRT_metagene", group.by="Cluster", pt.size=0)
+Polioudakis_dimplotX <- DimPlot(object = seurat_obj, label = F, group.by = "Cluster") + theme(legend.position = "right")
+Polioudakis_atrt_featureplotX <- FeaturePlot(object = seurat_obj,  "ATRT_metagene", min.cutoff = 0, label = F)
+
+ggsave(Polioudakis_atrt_featureplotX, width = 10, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/FP_Projection.png")
+ggsave(Polioudakis_atrt_violinplotX, width = 13, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/VP_Projection.png")
+
+Polioudakis_atrt_violinplot_2X <- VlnPlot(seurat_obj, features = "ATRT_metagene", group.by="Subcluster", pt.size=0) +theme(legend.position = "none")
+Polioudakis_dimplot_2X <- DimPlot(object = seurat_obj, label = T, group.by = "Subcluster", label.size = 3.5)
+Polioudakis_atrt_featureplot_2X <- FeaturePlot(object = seurat_obj,  "ATRT_metagene", min.cutoff = 0, label = T, label.size = 4)
+
+ggsave(Polioudakis_atrt_featureplot_2X, width = 10, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/2FP_Projection.png")
+ggsave(Polioudakis_atrt_violinplot_2X, width = 22, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/2VP_Projection.png")
+
+#################### SUBGROUP PROJECTION ####################
+# Load required data objects
+nmf.res <- readRDS(file = "/home/raisaa/SeuratProject2/nmf.res.atrt.subgrp.rds")
+
+# Load sample data as matrix object
+source(file = "/home/raisaa/Group3-4App-main/StarProtocols_Guide/R/Project_NMF.R")
+
+# Project NMF model to sequencing data
+tpms.mat <- project.NMF(input.array = as.matrix(tpms.mat.in), nmf.result = nmf.res)
+
+# Rows 3 in tpms.mat correspond to the ATRT metagene, extract them from the data and transpose matrix
+atrt.tpms <- t(tpms.mat[c(3,2,1),]) 
+
+# Apply logistic transformation to metagenes
+logistic.atrt.tpms <- apply(atrt.tpms,2,function(x){(1 / (1 + exp(-x)))}) 
+
+# Present output as data frame for export
+logistic.atrt.tpms <- as.data.frame(logistic.atrt.tpms)
+data.frame(logistic.atrt.tpms)
+
+# Projected results, map them back onto the seurat object
+# logistic.atrt.tpms -> seurat_obj$logistic.atrt.tpms
+as.numeric(tpms.mat[3,]) -> seurat_obj$SHH_metagene
+as.numeric(tpms.mat[2,]) -> seurat_obj$MYC_metagene
+as.numeric(tpms.mat[1,]) -> seurat_obj$TYR_metagene
+
+# Plot violin plots for each metagenes
+Polioudakis_shh_violinplot <- VlnPlot(seurat_obj, features = "SHH_metagene", group.by="Cluster", pt.size=0)
+Polioudakis_myc_violinplot <- VlnPlot(seurat_obj, features = "MYC_metagene", group.by="Cluster", pt.size=0)
+Polioudakis_tyr_violinplot <- VlnPlot(seurat_obj, features = "TYR_metagene", group.by="Cluster", pt.size=0)
+
+Polioudakis_shh_featureplot <- FeaturePlot(object = seurat_obj,  "SHH_metagene", cols = c("grey","green"), min.cutoff = 0.6, label = T)
+Polioudakis_myc_featureplot <- FeaturePlot(object = seurat_obj, "MYC_metagene", cols = c("grey","yellow"), min.cutoff = 0.6, label = T)
+Polioudakis_tyr_featureplot <- FeaturePlot(object = seurat_obj, "TYR_metagene", cols = c("grey","red"),min.cutoff=0.6, label = T)
+
+ggsave(Polioudakis_shh_violinplot, width = 13, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/VP_shhProjection.png")
+ggsave(Polioudakis_myc_violinplot, width = 13, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/VP_mycProjection.png")
+ggsave(Polioudakis_tyr_violinplot, width = 13, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/VP_tyrProjection.png")
+VP_All_Polioudakis <- plot_grid(Polioudakis_atrt_violinplotX,Polioudakis_shh_violinplot,Polioudakis_myc_violinplot,Polioudakis_tyr_violinplot, ncol=2, nrow=2, rel_widths = c(1,1.3)) +theme(legend.position = "none")
+ggsave(VP_All_Polioudakis,  width = 14, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/VP_All_Projection.png")
+
+ggsave(Polioudakis_shh_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/FP_shhProjection.png")
+ggsave(Polioudakis_myc_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/FP_mycProjection.png")
+ggsave(Polioudakis_tyr_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/FP_tyrProjection.png")
+FP_All_Polioudakis <- plot_grid(Polioudakis_atrt_featureplotX,Polioudakis_shh_featureplot,Polioudakis_myc_featureplot,Polioudakis_tyr_featureplot, ncol=2, nrow=2) +theme(legend.position = "right")
+ggsave(FP_All_Polioudakis,  width = 14, height = 13, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/FP_All_Projection.png")
+
+ggsave(FP_All_Polioudakis+VP_All_Polioudakis, width = 28, height = 13, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/FP_VP_All_Projection.png")
+
+# Plot violin plots for each metagenes (subcluster)
+Polioudakis_shh_violinplot_2X <- VlnPlot(seurat_obj, features = "SHH_metagene", group.by="Subcluster", pt.size=0) +theme(legend.position = "none")
+Polioudakis_myc_violinplot_2X <- VlnPlot(seurat_obj, features = "MYC_metagene", group.by="Subcluster", pt.size=0) +theme(legend.position = "none")
+Polioudakis_tyr_violinplot_2X <- VlnPlot(seurat_obj, features = "TYR_metagene", group.by="Subcluster", pt.size=0) +theme(legend.position = "none")
+
+# Plot violin plots for each metagenes (seurat_clusters)
+Polioudakis_shh_violinplot3 <- VlnPlot(seurat_obj, features = "SHH_metagene") + theme(legend.position = "none")   
+Polioudakis_myc_violinplot3 <- VlnPlot(seurat_obj, features = "MYC_metagene", group.by = "seurat_clusters") +  theme(legend.position = "none")  
+Polioudakis_tyr_violinplot3 <- VlnPlot(seurat_obj, features = "TYR_metagene", group.by = "seurat_clusters") + theme(legend.position = "none")   
+Polioudakis_atrt_violinplot3 <- VlnPlot(seurat_obj, features = "ATRT_metagene", group.by = "seurat_clusters") + theme(legend.position = "none")   
+
+Polioudakis_shh_featureplotX <- FeaturePlot(object = seurat_obj,  "SHH_metagene", cols = c("grey","green"), min.cutoff = 0.6, label = T)
+Polioudakis_myc_featureplotX <- FeaturePlot(object = seurat_obj, "MYC_metagene", cols = c("grey","yellow"), min.cutoff = 0.6, label = T)
+Polioudakis_tyr_featureplotX <- FeaturePlot(object = seurat_obj, "TYR_metagene", cols = c("grey","red"),min.cutoff=0.6, label = T)
+
+ggsave(Polioudakis_shh_violinplot_2X, width = 13, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/2VP_shhProjection.png") 
+ggsave(Polioudakis_myc_violinplot_2X, width = 13, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/2VP_mycProjection.png") 
+ggsave(Polioudakis_tyr_violinplot_2X, width = 13, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/2VP_tyrProjection.png") 
+VP_All_Polioudakis_2X <- plot_grid(Polioudakis_atrt_violinplot_2X,Polioudakis_shh_violinplot_2X,Polioudakis_myc_violinplot_2X,Polioudakis_tyr_violinplot_2X, ncol=2, nrow=2, rel_widths = c(1,1.3)) +theme(legend.position = "right")
+ggsave(VP_All_Polioudakis_2X,width = 14, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/2VP_All_Projection.png")
+
+ggsave(Polioudakis_shh_violinplot3, width = 13, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/3_VP_shhProjection.png") 
+ggsave(Polioudakis_myc_violinplot3, width = 13, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/3_VP_mycProjection.png")
+ggsave(Polioudakis_tyr_violinplot3, width = 13, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/3_VP_tyrProjection.png")
+VP_All_Polioudakis3 <- plot_grid(Polioudakis_atrt_violinplot3,Polioudakis_shh_violinplot3,Polioudakis_myc_violinplot3,Polioudakis_tyr_violinplot3, ncol=2, nrow=2) +theme(legend.position = "right")
+ggsave(VP_All_Polioudakis3,  width = 14, height = 12, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/3_VP_All_Projection.png")
+
+ggsave(Polioudakis_shh_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/FP_shhProjection.png")
+ggsave(Polioudakis_myc_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/FP_mycProjection.png")
+ggsave(Polioudakis_tyr_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/FP_tyrProjection.png")
+FP_All_Polioudakis <- plot_grid(Polioudakis_atrt_featureplotX,Polioudakis_shh_featureplot,Polioudakis_myc_featureplot,Polioudakis_tyr_featureplot, ncol=2, nrow=2) +theme(legend.position = "right")
+ggsave(FP_All_Polioudakis,  width = 14, height = 13, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/FP_All_Projection.png")
+
+ggsave(FP_All_Polioudakis+VP_All_Polioudakis_2X, width = 28, height = 13, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/2FP_VP_All_Projection.png")
+
+dimplots <- plot_grid(p1,p1_2, nrow=1)
+fp_dimplots <- plot_grid(dimplots,FP_All_Polioudakis, nrow=1, rel_widths = c(1.6,1))
+vps <- plot_grid(VP_All_Polioudakis, VP_All_Polioudakis_2X, nrow=1, rel_widths = c(1,2.5))
+complete <- plot_grid(dimplots,FP_All_Polioudakis,VP_All_Polioudakis, VP_All_Polioudakis_2X, nrow=4)
+
+ggsave(fp_dimplots, width = 36, height = 16, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/COMPLETE_FPDIMPLOTS.png")
+ggsave(vps, width = 36, height = 14, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/COMPLETE_VPs.png")
+ggsave(complete, width = 14, height = 22, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/COMPLETE.png")
+
+#### Plots for dissertation ####
+Polioudakis_shh_featureplotX <- FeaturePlot(object = seurat_obj,  "SHH_metagene", cols = c("grey","green"), min.cutoff = 0.4, label = F, label.size = 4)
+Polioudakis_myc_featureplotX <- FeaturePlot(object = seurat_obj, "MYC_metagene", cols = c("grey","yellow"), min.cutoff = 0.4, label = F, label.size = 4)
+Polioudakis_tyr_featureplotX <- FeaturePlot(object = seurat_obj, "TYR_metagene", cols = c("grey","red"),min.cutoff=0.4, label = F, label.size = 4)
+
+dissplots_umap <- plot_grid(Polioudakis_dimplot_2, Polioudakis_atrt_featureplot_2, labels=c("a","b"))
+dissplots_fp <- plot_grid(Polioudakis_dimplot_2X,Polioudakis_shh_featureplotX, Polioudakis_myc_featureplotX,Polioudakis_tyr_featureplotX, labels=c("c","d","e","f"))
+dissplots_vp <- plot_grid(Polioudakis_atrt_violinplot_2, Polioudakis_shh_violinplot_2X, Polioudakis_myc_violinplot_2X, Polioudakis_tyr_violinplot_2X, labels=c("g", "h","i","j"))
+dissplots_total <- plot_grid(dissplots_umap,dissplots_fp, dissplots_vp, nrow = 3, rel_heights = c(1,1.8,1))
+ggsave(dissplots_total, width = 18, height = 24, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/Dissplots.png")
+
+poster1 <- plot_grid(Polioudakis_dimplotX,Polioudakis_atrt_featureplotX, nrow=1, rel_widths = c(1,1), labels = c("a","b"))
+poster2 <- plot_grid(Polioudakis_shh_featureplotX, Polioudakis_myc_featureplotX,Polioudakis_tyr_featureplotX, nrow=1, labels = c("c"))
+poster <- plot_grid(poster1, poster2, nrow=2)
+ggsave(poster1, width = 15, height = 7, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Dissplot/Poster_Dissplots.png")
+ggsave(poster2, width = 18, height = 6, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Dissplot/Poster_Dissplots2.png")
+
+
+# Find all markers
+# find markers for every cluster compared to all remaining cells, report only the positive
+# ones
+Polioudakis.markers <- FindAllMarkers(seurat_obj, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+Polioudakis.markers %>%
+  group_by(cluster) %>%
+  slice_max(n = 30, order_by = avg_log2FC) -> top10.Polioudakis
+saveRDS(top10.Polioudakis, file="~/SeuratProject2/ATRT_Polioudakis/top10.Polioudakis")
+top10.Polioudakis <- readRDS(file="~/SeuratProject2/ATRT_Polioudakis/top10.Polioudakis")
+
+write.table(top10.Polioudakis, file = "~/SeuratProject2/ATRT_Polioudakis/toppolioudakismarker.tsv", sep = "\t", row.names = FALSE)
+
+# MYC metagene
+cluster7.markers <- FindMarkers(seurat_obj, ident.1 = 7, min.pct = 0.5)
+head(cluster7.markers, n = 20)
+
+cluster9.markers <- FindMarkers(seurat_obj, ident.1 = 9, min.pct = 0.5)
+head(cluster9.markers, n = 20)
+
+# SHH metagene
+cluster4.markers <- FindMarkers(seurat_obj, ident.1 = 4, min.pct = 0.5)
+head(cluster4.markers, n = 20)
+
+cluster11.markers <- FindMarkers(seurat_obj, ident.1 = 11, min.pct = 0.5)
+head(cluster11.markers, n = 20)
+
+# TYR metagene
+cluster4.markers <- FindMarkers(seurat_obj, ident.1 = 4, min.pct = 0.5)
+head(cluster4.markers, n = 20)
+
+# Boxplot to see tumour markers that are expressed in the dataset
+# This is the script boxplot(MRT.subgroup.exp[[1]]["ENSG00000184486",]~MRT.subgroup.anno[[1]]$NMFCall)
+# SHH
+boxplot(seurat_obj["ENSG00000184486",]~MRT.subgroup.anno[[1]]$NMFCall)
+
+shh_fp <- FeaturePlot(seurat_obj, features = c("FABP7","BCHE","PTPRZ1","TTYH1","TUBB2B","PCDH9","GRIA2","PTN","ID4","SOX2-OT","SLC1A2","SLC1A3"), cols= c("grey", "green"), ncol=4, min.cutoff = 1.5)# max.cutoff = 5)
+
+# MYC: there are not any marker gene from this dataset that are highly expressed in the subgroup
+
+# TYR
+tyr_fp <- FeaturePlot(seurat_obj, features=c("CDO1"), cols= c("grey", "red"), ncol=1, min.cutoff = 1) # max.cutoff = 5)
+
+subgroups_fp <- plot_grid(shh_fp,tyr_fp, nrow=1, rel_widths = c(1.5,1))
+ggsave(subgroups_fp, height=14, width=24, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/FP_GeneSubgroups.png")
+
+# This is to plot top gene markers for each subgroup
+# SHH
+shh_markers_fp <- FeaturePlot(seurat_obj, features = c("SOX1","POU3F2","PTPRZ1","FABP7","TOX3","BRINP1","TTYH1","BCHE","TUBB2B","PCDH9"), min.cutoff = 1, cols= c("grey", "green"), ncol=2)
+
+# MYC
+myc_markers_fp <- FeaturePlot(seurat_obj, features = c("MEOX2","DNM3OS","H19","HOXC6","TNNT1","LUM","CDC42EP5","VGLL3","HOXC9","NEFH"), min.cutoff = 0, cols= c("grey", "yellow"),ncol=2)
+
+# TYR
+tyr_markers_fp <- FeaturePlot(seurat_obj, features = c("HTR2C","CLIC6","TPD52L1","PCP4","ENPP2","CP","RMST","SOST","OTX2-AS1","SOX1"), min.cutoff = 0, cols= c("grey", "red"),ncol=2)
+
+markerssubgroups_fp <- plot_grid(shh_markers_fp,myc_markers_fp,tyr_markers_fp, nrow=1)
+ggsave(markerssubgroups_fp, height=14, width=24, file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Metagene projection/FP_SubgroupMarkers.png")
+
+
+########### LINEAGE ###########
+# Create an object of chosen cell types
+lineage <- c("IP","oRG","PgG2M","PgS","vRG")
+
+### subset the columns of this large seurat object to give only the cluster we want
+seurat_obj.lineage <- seurat_obj[,seurat_obj$Cluster%in%lineage]
+
+# Convert Seurat object as cell data set (cds)
+cds_polioudakis_lineage <- as.cell_data_set(seurat_obj.lineage)
+
+cds_polioudakis_lineage@rowRanges@elementMetadata@listData[["gene_short_name"]] <- rownames(seurat_obj[["RNA"]])
+
+# Preprocess CDS data
+cds_polioudakis_lineage <- preprocess_cds(cds_polioudakis_lineage, num_dim = 50)
+
+# Align CDS data
+cds_polioudakis_lineage <- align_cds(cds_polioudakis_lineage)
+
+# Reduce data dimension
+cds_polioudakis_lineage <- reduce_dimension(cds_polioudakis_lineage)
+
+# Cluster cells
+cds_polioudakis_lineage <- cluster_cells(cds_polioudakis_lineage)
+
+# Plot before trajectory
+polioudakis.before.trajectory.lineage <- plot_cells(cds_polioudakis_lineage, show_trajectory_graph = FALSE,
+                                                  color_cells_by = "Cluster", label_groups_by_cluster = TRUE, group_label_size = 2, force(T)) +
+  theme(legend.position = "right")
+
+ggsave(polioudakis.before.trajectory.lineage, height = 7, width = 9, 
+       file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Trajectory analysis/polioudakis_Before_Trajectory_lineage.png")
+
+# See partition
+plot_cells(cds_polioudakis_lineage, color_cells_by = "partition")
+
+# Plot learn graph
+cds_polioudakis_lineage <- learn_graph(cds_polioudakis_lineage, use_partition = F)
+
+# Plot order graph
+cds_polioudakis_lineage <- order_cells(cds_polioudakis_lineage)
+
+# Plot clusters trajectory
+polioudakis.clusters.trajectory.lineage <- plot_cells(cds_polioudakis_lineage,
+                                                    color_cells_by = "Cluster",
+                                                    label_groups_by_cluster = FALSE,
+                                                    label_branch_points = FALSE,
+                                                    label_roots = FALSE,
+                                                    label_leaves = FALSE,
+                                                    group_label_size = 4,
+)  + theme(legend.position = "right")
+
+ggsave(polioudakis.clusters.trajectory.lineage, height = 7, width = 9, 
+       file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Trajectory analysis/polioudakis_Trajectory_lineage.png")
+
+plot_title <- "TYR_metagene"
+meta.tyr <- plot_cells(cds_polioudakis_lineage,
+                       color_cells_by = "TYR_metagene",
+                       label_cell_groups=TRUE,
+                       label_leaves=FALSE,
+                       label_branch_points=FALSE,
+                       graph_label_size=1.5,
+                       cell_stroke = 0.2,
+                       scale_to_range = F, cell_size = 1, alpha = 0.6) + 
+  scale_colour_gradient2(
+    low = "white",
+    mid = "white",
+    high = "red",
+    midpoint = 0.1,
+    space = "Lab",
+    na.value = "grey50",
+    guide = "colourbar",
+    aesthetics = "colour"
+  ) + ggtitle(plot_title) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+plot_title <- "MYC_metagene"
+meta.myc <- plot_cells(cds_polioudakis_lineage,
+                       color_cells_by = "MYC_metagene",
+                       label_cell_groups=TRUE,
+                       label_leaves=FALSE,
+                       label_branch_points=FALSE,
+                       graph_label_size=1.5,
+                       cell_stroke = 0.2,
+                       scale_to_range = F, cell_size = 1, alpha = 0.6) + 
+  scale_colour_gradient2(
+    low = "white",
+    mid = "white",
+    high = "yellow",
+    midpoint = 0.1,
+    space = "Lab",
+    na.value = "grey50",
+    guide = "colourbar",
+    aesthetics = "colour"
+  ) + ggtitle(plot_title) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+plot_title <- "SHH_metagene"
+meta.shh <- plot_cells(cds_polioudakis_lineage,
+                       color_cells_by = "SHH_metagene",
+                       label_cell_groups=TRUE,
+                       label_leaves=FALSE,
+                       label_branch_points=FALSE,
+                       graph_label_size=1.5,
+                       cell_stroke = 0.2,
+                       scale_to_range = F, cell_size = 1, alpha = 0.6) + 
+  scale_colour_gradient2(
+    low = "white",
+    mid = "white",
+    high = "green",
+    midpoint = 0.1,
+    space = "Lab",
+    na.value = "grey50",
+    guide = "colourbar",
+    aesthetics = "colour"
+  ) + ggtitle(plot_title) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+metagenes <- plot_grid(polioudakis.clusters.trajectory.lineage,meta.tyr,meta.myc,meta.shh, labels=c("a","b","c","d"), ncol = 2, nrow = 2)
+ggsave(metagenes, height=14,width=22,file="~/SeuratProject2/ATRT_Polioudakis/Polioudakis data analysis/Trajectory analysis/polioudakis_Trajectory_Metagenes_lineage.png")

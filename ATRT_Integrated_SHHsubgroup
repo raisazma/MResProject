@@ -1,0 +1,255 @@
+library(Seurat)
+library(ggplot2)
+
+# This is the finalised object
+saveRDS(integrated.sct, file="~/SeuratProject2/ATRT_Integrated/integrated.sct.rds")
+integrated.sct <- readRDS(file="~/SeuratProject2/ATRT_Integrated/integrated.sct.rds")
+
+# Load objects
+int_sc.data <- readRDS(file="~/SeuratProject2/ATRT_Andersen/sc.data.rds")
+int_spinal.cord.big <- readRDS(file="~/SeuratProject2/ATRT_Rayon/spinal.cord.big.rds")
+int_seurat_obj <- readRDS(file="~/SeuratProject2/ATRT_Polioudakis/seurat_obj.rds")
+int_brain.data2 <- readRDS(file="/home/raisaa/SeuratProject2/ATRT_Eze/brain.data2.rds")
+
+int_sc.data@meta.data[, "protocol"] <- "Spinal cord GW 17-18"
+int_seurat_obj@meta.data[,"protocol"] <- "Brain GW 17-18"
+int_spinal.cord.big@meta.data[, "protocol"] <- "Spinal cord GW 4-7"
+int_brain.data2@meta.data[,"protocol"] <- "Brain GW 6-10"
+
+# Create an object of chosen cell types
+chosen.cell.types <- c("Astrocyte","OPC.Oligo")
+
+### subset the columns of this large seurat object to give only the cluster we want
+int_sc.data <- int_sc.data[,int_sc.data$cell.type%in%chosen.cell.types]
+
+# List names of all specific cell ids
+list(int_sc.data$specific.id)
+
+# Create an object of chosen cell types
+chosen.cell.ids <- c("NFOL","MFOL","OPC", "Dorsal_Proto_1","Dorsal_Proto_2","Ventral_Proto_1","Ventral_Proto_2","Ventral_Proto_3")
+
+### subset the columns of this large seurat object to give only the cluster we want
+int_sc.data <- int_sc.data[,int_sc.data$specific.id%in%chosen.cell.ids]
+
+# Create an object of chosen cell types
+chosen.type<- c("Neuron")
+
+### subset the columns of this large seurat object to give only the cluster we want
+int_spinal.cord.big <- int_spinal.cord.big[,int_spinal.cord.big$type%in%chosen.type]
+
+# Create an object of chosen cell types
+chosen.cell.types <- c("Neuronal","IPC")
+
+### subset the columns of this large seurat object to give only the cluster we want
+int_brain.data2 <- int_brain.data2[,int_brain.data2$Cell.Type%in%chosen.cell.types]
+
+# Create an object of chosen subclusters
+chosen.subclusters <- c("OPC_0","OPC_1",
+                        "OPC_2","OPC_3","OPC_4","OPC_5","oRG_0","oRG_1","oRG_2","oRG_3","oRG_4")
+
+### subset the columns of this large seurat object to give only the cluster we want
+int_seurat_obj <- int_seurat_obj[,int_seurat_obj$Subcluster%in%chosen.subclusters]
+
+# Set up list, including both andersen and Lu data
+data_list <- list()
+data_list[["Andersen et al. (Spinal cord GW 17-18)"]] <- int_spinal.cord.big
+data_list[["Rayon (Spinal cord GW 4-7)"]] <- int_sc.data
+data_list[["Poliudakis (Brain GW 17-18)"]] <- int_seurat_obj
+data_list[["Eze (Brain GW 6-10)"]] <- int_brain.data2
+
+# Remove once objects are in the list 
+rm(int_spinal.cord.big)
+rm(int_sc.data)
+rm(int_brain.data2)
+rm(int_seurat_obj)
+
+# Apply SCTransform
+data_list <- lapply(X = data_list, FUN = SCTransform)
+
+# Select features that are repeatedly variable across datasets for integration
+features <- SelectIntegrationFeatures(object.list = data_list, nfeatures = 3000)
+data_list <- PrepSCTIntegration(object.list = data_list, anchor.features = features)
+
+# Identify anchors using the FindIntegrationAnchors() function, use these anchors to integrate the datasets together with IntegrateData().
+data_anchors <- FindIntegrationAnchors(object.list = data_list, normalization.method = "SCT", anchor.features = features)
+integrated.sct <- IntegrateData(anchorset = data_anchors, normalization.method = "SCT")
+rm(data_anchors)
+rm(data_list)
+
+# Specify that we will perform downstream analysis on the corrected data
+DefaultAssay(integrated.sct) <- "integrated"
+
+# Run the standard workflow for visualization and clustering
+integrated.sct <- RunPCA(integrated.sct, npcs = 30, verbose = F)
+integrated.sct <- RunUMAP(integrated.sct, reduction = "pca", dims = 1:30, verbose = F)
+
+integrated.sct <- saveRDS(integrated.sct, file="~/SeuratProject2/ATRT_Integrated/shhintegrated.sct.rds")
+integrated.sct <- readRDS(file="~/SeuratProject2/ATRT_Integrated/shhintegrated.sct.rds")
+
+# Plot integrated UMAP
+p1_shh <- DimPlot(integrated.sct, reduction = "umap", group.by= "protocol",label = F)
+plot(p1_shh)
+
+# Plot integrated relationship to andersen
+p2_shh <- DimPlot(integrated.sct, reduction = "umap", split.by = "protocol", label = T)
+plot(p2_shh)
+
+# Andersen
+p3_shh <- DimPlot(integrated.sct, reduction = "umap", group.by = "cell.type", label = T)
+plot(p3)
+
+# Polioudakis
+p4_shh <- DimPlot(integrated.sct, reduction = "umap", group.by = "Subcluster",label = T)
+plot(p4)
+
+# Rayon
+p5_shh <- DimPlot(integrated.sct, reduction = "umap", group.by = "type", label = T)
+plot(p5)
+
+# Eze
+p6_shh <- DimPlot(integrated.sct, reduction = "umap", group.by = "Cell.Type",label = T)
+plot(p6)
+
+alldimplot <- plot_grid(p1_shh,p2_shh,p3,p4,p5,p6, ncol= 3)
+
+ggsave(p1, file="~/SeuratProject2/ATRT_Integrated/shh_dimplot1_protocol.png")
+ggsave(p2, file="~/SeuratProject2/ATRT_Integrated/shh_dimplot2_protocol.png")
+ggsave(p3, file="~/SeuratProject2/ATRT_Integrated/shh_dimplot3_andersen.png")
+ggsave(p4, file="~/SeuratProject2/ATRT_Integrated/shh_dimplot4_polio.png")
+ggsave(p5, file="~/SeuratProject2/ATRT_Integrated/shh_dimplot4_rayon.png")
+ggsave(p6, file="~/SeuratProject2/ATRT_Integrated/shh-dimplot4_eze.png")
+ggsave(alldimplot, height=10, width= 22, file="~/SeuratProject2/ATRT_Integrated/shh_alldimplot.png")
+
+library(cowplot)
+grid_integrated_dimplot <- plot_grid(p1_shh,p2_shh,p3,p4, labels=c("a","b","c","d"),nrow = 2)
+ggsave(grid_integrated_dimplot, height=15, width=20,file="~/SeuratProject2/ATRT_Integrated/shh_grid_integrated_dimplot.png")
+
+# Install and load libraries
+library("NMF")
+library("MASS")
+library(biomaRt)
+
+# Extract the values for the projection
+DefaultAssay(object = integrated.sct) <- "integrated"
+
+# Extract the normalised count data
+tpms.mat.in <- as.data.frame(integrated.sct[["integrated"]]@scale.data)
+
+ensembl_IDs <- rownames(tpms.mat.in)
+
+mart <- useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl")
+
+symbols <- getBM(attributes = c("hgnc_symbol", "ensembl_gene_id"),  
+                 filters = "hgnc_symbol", 
+                 ensembl_IDs, 
+                 mart = mart) 
+
+annotatedix  <- match(ensembl_IDs, symbols$hgnc_symbol)
+symbols[annotatedix,]  ->  annotatedGenes
+tpms.mat.in$ensembl_gene_id <- annotatedGenes$ensembl_gene_id
+
+#Remove duplicated rows using:
+tpms.mat.in <- tpms.mat.in[!duplicated(tpms.mat.in$ensembl_gene_id),]  
+
+#Remove transcripts with no gene annotation using:
+tpms.mat.in <- na.omit(tpms.mat.in)
+
+#Set gene IDs as rownames and remove column:
+rownames(tpms.mat.in) <- tpms.mat.in$ensembl_gene_id
+tpms.mat.in$ensembl_gene_id <- NULL
+
+# Load required data objects
+nmf.res <- readRDS(file = "/home/raisaa/SeuratProject2/nmf.res.atrt.rds")
+
+# Load sample data as matrix object
+source(file = "/home/raisaa/Group3-4App-main/StarProtocols_Guide/R/Project_NMF.R")
+
+# Project NMF model to sequencing data
+tpms.mat <- project.NMF(input.array = as.matrix(tpms.mat.in), nmf.result = nmf.res)
+
+# Rows 3 in tpms.mat correspond to the ATRT metagene, extract them from the data and transpose matrix
+atrt.tpms <- t(tpms.mat[c(3),])
+
+# Apply logistic transformation to metagenes
+logistic.atrt.tpms <- apply(atrt.tpms,2,function(x){(1 / (1 + exp(-x)))})
+
+# Present output as data frame for export
+logistic.atrt.tpms <- as.data.frame(logistic.atrt.tpms)
+data.frame(logistic.atrt.tpms)
+
+# Projected results, map them back onto the seurat object
+logistic.atrt.tpms -> integrated.sct$logistic.atrt.tpms
+as.numeric(tpms.mat[3,]) -> integrated.sct$ATRT_metagene
+
+# Plot violin plots for each metagenes
+int_atrt_violinplot <- VlnPlot(integrated.sct, features = "ATRT_metagene", group.by = "protocol",pt.size=0) + theme(legend.position = "none")  
+int_dimplot <- DimPlot(object = integrated.sct, group.by = "protocol", label = T)
+int_atrt_featureplot <- FeaturePlot(object = integrated.sct,  "ATRT_metagene", min.cutoff = 0.5, label = T)
+
+#################### SUBGROUP PROJECTION ####################
+# Load required data objects
+nmf.res <- readRDS(file = "/home/raisaa/SeuratProject2/nmf.res.atrt.subgrp.rds")
+
+# Load sample data as matrix object
+source(file = "/home/raisaa/Group3-4App-main/StarProtocols_Guide/R/Project_NMF.R")
+
+# Project NMF model to sequencing data
+tpms.mat <- project.NMF(input.array = as.matrix(tpms.mat.in), nmf.result = nmf.res)
+
+# Rows 3 in tpms.mat correspond to the ATRT metagene, extract them from the data and transpose matrix
+atrt.tpms <- t(tpms.mat[c(3,2,1),]) 
+
+# Apply logistic transformation to metagenes
+logistic.atrt.tpms <- apply(atrt.tpms,2,function(x){(1 / (1 + exp(-x)))}) 
+
+# Present output as data frame for export
+logistic.atrt.tpms <- as.data.frame(logistic.atrt.tpms)
+data.frame(logistic.atrt.tpms)
+
+# Projected results, map them back onto the seurat object
+# logistic.atrt.tpms -> integrated.sct$logistic.atrt.tpms
+as.numeric(tpms.mat[3,]) -> integrated.sct$SHH_metagene
+as.numeric(tpms.mat[2,]) -> integrated.sct$MYC_metagene
+as.numeric(tpms.mat[1,]) -> integrated.sct$TYR_metagene
+
+# Plot violin plots for each metagenes (POLIOUDAKIS)
+sc_int_shh_violinplot <- VlnPlot(integrated.sct, features = "SHH_metagene", group.by="seurat_clusters", pt.size=0)
+a_int_shh_violinplot <- VlnPlot(integrated.sct, features = "SHH_metagene", group.by="cell.type", pt.size=0)
+p_int_SHH_violinplot <- VlnPlot(integrated.sct, features = "SHH_metagene", group.by="Subcluster", pt.size=0)
+r_int_SHH_violinplot <- VlnPlot(integrated.sct, features = "SHH_metagene", group.by="type", pt.size=0)
+e_int_SHH_violinplot <- VlnPlot(integrated.sct, features = "SHH_metagene", group.by="Cell.Type", pt.size=0)
+
+int_SHH_featureplot <- FeaturePlot(object = integrated.sct, "SHH_metagene", cols = c("grey","red"), min.cutoff=0.7, label = T)
+ggsave(int_SHH_featureplot, height=10, width= 15,file="~/SeuratProject2/ATRT_Integrated/int_shh_fp.png")
+
+grid_integrated_dimplot <- plot_grid(p1_shh,p2_shh,p3,p4, labels=c("a","b","c","d"),nrow = 2)
+ggsave(alldimplot, height=10, width= 22, file="~/SeuratProject2/ATRT_Integrated/shh_alldimplot.png")
+
+grid_fp_vp <- plot_grid(int_SHH_featureplot, sc_int_shh_violinplot, labels = c(" "," "))
+
+grid_dissplot_shh <- plot_grid(p1_shh,p2_shh,int_SHH_featureplot,sc_int_shh_violinplot, labels = c("a","b","c","d"), rel_widths = c(1,1.5))
+ggsave(grid_dissplot_shh, height=10, width= 19, file="~/SeuratProject2/ATRT_Integrated/dissplot_shh.png")
+
+grid_dissplot_tyr <- plot_grid(p1,p2,int_tyr_featureplot,sc_int_tyr_violinplot, labels = c("e","f","g","h"), rel_widths = c(1,1.5))
+ggsave(grid_dissplot_tyr, height=10, width= 19, file="~/SeuratProject2/ATRT_Integrated/dissplot_tyr.png")
+
+grid_dissplot_integ <- plot_grid(grid_dissplot_shh, grid_dissplot_tyr, nrow=2)
+ggsave(grid_dissplot_integ, height=20, width= 19, file="~/SeuratProject2/ATRT_Integrated/dissplot_integ.png")
+
+test <- plot_grid(p3_shh,p4_shh,p5_shh,p6_shh,int_SHH_featureplot,nrow=1)
+test2 <- plot_grid(p3,p4,p5,p6,int_tyr_featureplot,nrow=1)
+test3 <- plot_grid(test,test2,nrow=2)
+ggsave(test3, height=20, width= 23, file="~/SeuratProject2/ATRT_Integrated/poster2_dissplot_shh_tyr.png")
+
+# Poster
+grid_poster_shh <- plot_grid(p2_shh,int_SHH_featureplot,p2,int_tyr_featureplot, labels = c("a","b","c","d"), rel_widths = c(2,0.7))
+ggsave(grid_poster_shh, height=14, width= 23, file="~/SeuratProject2/ATRT_Integrated/poster_dissplot_shh_tyr.png")
+
+# Find all markers
+shh.markers <- FindAllMarkers(integrated.sct, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+shh.markers %>%
+  group_by(cluster) %>%
+  slice_max(n = 75, order_by = avg_log2FC) -> top10.shh
+saveRDS(top10.shh, file="~/SeuratProject2/ATRT_Integrated/topshhmarker.rds")
+top10.shh <- readRDS(file="~/SeuratProject2/ATRT_Integrated/topshhmarker.rds")
+write.table(top10.shh, file = "~/SeuratProject2/ATRT_Integrated/topshhmarker.tsv", sep = "\t", row.names = FALSE)

@@ -4,7 +4,7 @@ library(patchwork)
 library(R.utils)
 library(ggplot2)
 
-####################### Lu #######################
+####################### Cerebellum dataset by Luo et al. #######################
 # Create object
 cerebellum.data <- readRDS("~/SeuratProject/Aldinger data analysis/GSM5952337_Fetal_cerebellum_F (1).rds")
 
@@ -104,9 +104,7 @@ ggsave(grid_lu_qc, height=12,width=27,file="~/SeuratProject/Lu data analysis/Bas
 grid_lu_dimreduction <- plot_grid(lu_vizdimloadings,lu_pca,lu_elbowplot,lu_umap,labels=c("a","b","c","d"), nrow=2,rel_widths = c(1,2))
 ggsave(grid_lu_dimreduction, height=12,width=24,file="~/SeuratProject/Lu data analysis/Basic Seurat/grid_lu_dimreduction.png")
 
-# test out feature and violin plot
-# FeaturePlot(cerebellum.data, "MYC")
-# VlnPlot(cerebellum.data, features = c("SOX2","SOX11"), group.by = "cluster.names")
+############# Create a new subset comprising equivalents of the rhombic lip lineage defined by Aldinger et al. ##############
 
 # List names of all clusters
 levels(cerebellum.data$cluster.names)
@@ -117,22 +115,6 @@ cerebellum.clusters.of.interest <- c("01NSC", "02TCP", "06GCP_pro", "07GCP1","08
 ### subset the columns of this large seurat object to give only the cluster we want
 subset.cerebellum.data <- cerebellum.data[,cerebellum.data$cluster.names%in%cerebellum.clusters.of.interest]
 
-### these are the genes which define 02 RL precursors by aldinger
-VlnPlot(subset.cerebellum.data, features = c("OTX2","LMX1A","MKI67"), group.by = "cluster.names")
-
-VlnPlot(subset.cerebellum.data, features = c("OTX2","LMX1A","GRIA1","PTPRK","MEIS2","RBFOX3","ITPR1","DNAH6","SOX2","DNAH11","ITPK1"), group.by = "cluster.names")
-
-### TCP markers as defined by Lu Lab paper 02TCP
-VlnPlot(subset.cerebellum.data,features = c("HNRNPH1","SOX11"), group.by = "cluster.names")
-
-### genes listed from Supp Fig2 panel D in Richard Lu's, including some used to define the aldinger set
-VlnPlot(subset.cerebellum.data, features = c("WLS","LMX1A","OTX2","HNRNPH1","SOX11","RSPO3","EOMES","BARHL1"),group.by = "cluster.names")
-
-### genes listed from Supp Fig2 panel D in Richard Lu's, including some used to define the aldinger set
-VlnPlot(subset.cerebellum.data, features = c("SOX2","NMU","CIP2A","KPNA2","UNCX"),group.by = "cluster.names")
-#FeaturePlot(subset.cerebellum.data, "OTX2")                                            
-
-############# NEW SUBSET ##############
 ### subset the columns of this large seurat object to give only the cluster we want
 subset.cerebellum.data <- cerebellum.data[,cerebellum.data$cluster.names%in%cerebellum.clusters.of.interest]
 
@@ -324,7 +306,37 @@ p4_ecnubc <- FeaturePlot(object = cerebellum.data, features = c("PAX6"),label = 
 grid.arrange(p1,p2_ecnubc,p3_ecnubc,p4_ecnubc,nrow=1) -> ecnubc_plot
 ggsave(ecnubc_plot, width = 27, height = 11, file="~/SeuratProject/Lu data analysis/Basic Seurat/fp_ecnubc.png")
 
-#################### PROJECTION ####################
+### these are the genes which define 02 RL precursors by aldinger
+VlnPlot(subset.cerebellum.data, features = c("OTX2","LMX1A","MKI67"), group.by = "cluster.names")
+
+VlnPlot(subset.cerebellum.data, features = c("OTX2","LMX1A","GRIA1","PTPRK","MEIS2","RBFOX3","ITPR1","DNAH6","SOX2","DNAH11","ITPK1"), group.by = "cluster.names")
+
+### TCP markers as defined by Lu Lab paper 02TCP
+VlnPlot(subset.cerebellum.data,features = c("HNRNPH1","SOX11"), group.by = "cluster.names")
+
+### genes listed from Supp Fig2 panel D in Richard Lu's, including some used to define the aldinger set
+VlnPlot(subset.cerebellum.data, features = c("WLS","LMX1A","OTX2","HNRNPH1","SOX11","RSPO3","EOMES","BARHL1"),group.by = "cluster.names")
+
+### genes listed from Supp Fig2 panel D in Richard Lu's, including some used to define the aldinger set
+VlnPlot(subset.cerebellum.data, features = c("SOX2","NMU","CIP2A","KPNA2","UNCX"),group.by = "cluster.names")
+#FeaturePlot(subset.cerebellum.data, "OTX2")   
+
+#### FIND TCP MARKERS ####
+# Find markers for every cluster compared to all remaining cells, report only the positive ones
+luo.markers <- FindAllMarkers(subset.cerebellum.data, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+luo.markers %>%
+  group_by("seurat_clusters") %>%
+  slice_max(n = 10, order_by = avg_log2FC) -> top10
+
+write.table(luo.markers, file = "~/SeuratProject/Lu data analysis/Subset/tcp.tsv", sep = "\t", row.names = FALSE)
+luo.markers %>%
+  group_by(cluster) %>%
+  top_n(n = 10, wt = avg_log2FC) -> top10.luo
+
+t <- DoHeatmap(subset.cerebellum.data, features = top10.luo$gene) + NoLegend()
+ggsave(t, height=23, width=15, file="~/SeuratProject/Lu data analysis/Subset/t.png")
+
+#################### Medulloblastoma metagene projection ####################
 # Extract the values for the projection
 DefaultAssay(object = subset.cerebellum.data) <- "RNA"
 
@@ -370,10 +382,10 @@ as.numeric(tpms.mat[2,]) -> subset.cerebellum.data$wnt_metagene
 logistic.g3g4.tpms.continuum.score -> subset.cerebellum.data$g3g4.score
 
 # Plot violin plots for each metagenes
-lu_gr4_violinplot_cluster.names <- VlnPlot(subset.cerebellum.data, features = "group4_metagene", group.by = "cluster.names", pt.size = 0)
-lu_gr3_violinplot_cluster.names <- VlnPlot(subset.cerebellum.data, features = "group3_metagene" ,group.by = "cluster.names", pt.size = 0)
-lu_shh_violinplot_cluster.names <- VlnPlot(subset.cerebellum.data, features = "shh_metagene" ,group.by = "cluster.names", pt.size = 0)
-lu_wnt_violinplot_cluster.names <- VlnPlot(subset.cerebellum.data, features = "wnt_metagene" ,group.by = "cluster.names", pt.size = 0)
+lu_gr4_violinplot_cluster.names <- VlnPlot(subset.cerebellum.data, features = "group4_metagene", group.by = "cluster.names", pt.size = 0) + theme(legend.position = "none")
+lu_gr3_violinplot_cluster.names <- VlnPlot(subset.cerebellum.data, features = "group3_metagene" ,group.by = "cluster.names", pt.size = 0) + theme(legend.position = "none")
+lu_shh_violinplot_cluster.names <- VlnPlot(subset.cerebellum.data, features = "shh_metagene" ,group.by = "cluster.names", pt.size = 0) + theme(legend.position = "none")
+lu_wnt_violinplot_cluster.names <- VlnPlot(subset.cerebellum.data, features = "wnt_metagene" ,group.by = "cluster.names", pt.size = 0) + theme(legend.position = "none")
 
 ggsave(lu_gr4_violinplot_cluster.names, width = 10, height = 11, file="~/SeuratProject/Lu data analysis/Metagene projection/VP_Lu_Group4Projection.png")
 ggsave(lu_gr3_violinplot_cluster.names, width = 10, height = 11, file="~/SeuratProject/Lu data analysis/Metagene projection/VP_Group3Projection.png")
@@ -381,7 +393,7 @@ ggsave(lu_shh_violinplot_cluster.names, width = 10, height = 11, file="~/SeuratP
 ggsave(lu_wnt_violinplot_cluster.names, width = 10, height = 11, file="~/SeuratProject/Lu data analysis/Metagene projection/VP_WntProjection.png")
 
 ### draw some dimplots that show the clusters and the metagene and the g3g4 
-lu.dimplot.cluster.names <- DimPlot(object = subset.cerebellum.data, group.by = "cluster.names", label = T)
+lu.dimplot.cluster.names <- DimPlot(object = subset.cerebellum.data, group.by = "cluster.names", label = T) + theme(legend.position = "right")
 lu_gr4_featureplot <- FeaturePlot(object = subset.cerebellum.data,  "group4_metagene", cols = c("grey","green"), min.cutoff = 0)
 lu_gr3_featureplot <- FeaturePlot(object = subset.cerebellum.data, "group3_metagene", cols = c("grey","yellow"), min.cutoff = 0)
 lu_shh_featureplot <- FeaturePlot(object = subset.cerebellum.data, "shh_metagene", cols = c("grey","red"),min.cutoff=0) 
@@ -407,7 +419,6 @@ grid_lu_vp_projection <- plot_grid(lu_gr3_violinplot_cluster.names,lu_gr4_violin
                                          lu_shh_violinplot_cluster.names,lu_wnt_violinplot_cluster.names, labels=c("a", "b","c","d"), ncol = 2, nrow = 2)
 ggsave(grid_lu_vp_projection, height = 12, width = 16, 
        file="~/SeuratProject/Lu data analysis/Metagene projection/Grid_VP_Projection.png") 
-
 
 library(gridExtra)
 grid.arrange(lu.dimplot.cluster.names,
@@ -441,7 +452,7 @@ ggsave(lu.dimplot.all, height = 14, width = 12,
 
 ggsave(final.lu.dimplot.all, height=14,width=22,file="~/SeuratProject/Lu data analysis/Metagene projection/Grid_Lu_Projection.VPFP.png")
 
-########## LU TRAJECTORY ANALYSIS ###########
+########## Trajectory analysis ###########
 
 library(dplyr)
 library(Seurat)
@@ -451,9 +462,7 @@ library(monocle3)
 library(ggplot2)
 library(SeuratWrappers)
 
-cerebellum.data <- readRDS("~/cerebellardata/GSM5952337_Fetal_cerebellum_F (1).rds")
 subset.cerebellum.data <- readRDS("~/SeuratProject/Lu data analysis/Subset/subset.cerebellum.data.rds")
-rm(cerebellum.data)
 
 cds_lu <- as.cell_data_set(subset.cerebellum.data)
 
@@ -506,14 +515,18 @@ ggsave(lu.after.trajectory, height = 7, width = 9,
        file="~/SeuratProject/Lu data analysis/Trajectory analysis/Lu_After_Trajectory.png")
 
 # Lu trajectory
+plot_title <- "trajectory_luo"
 lu.clusters.trajectory <- plot_cells(cds_lu,
                                      color_cells_by = 'cluster.names',
                                      label_groups_by_cluster = FALSE,
                                      label_branch_points = FALSE,
                                      label_roots = FALSE,
                                      label_leaves = FALSE,
-                                     group_label_size = 4
-) + theme(legend.position = "right")
+                                     group_label_size = 0.1
+) + theme(legend.position = "none")
+
+lu.clusters.trajectory <- lu.clusters.trajectory + ggtitle(plot_title) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
 
 ggsave(lu.clusters.trajectory, height = 7, width = 9, 
        file="~/SeuratProject/Lu data analysis/Trajectory analysis/Lu.Clusters.Trajectory.png")
@@ -558,7 +571,7 @@ ggsave(plotnsc, height = 7, width = 9,
     # note: TCPs give rise to GCPs (ATOH1+) and UBCs (EOMES+, Eomesodermin). 
     # HNRNPH1+ cells that are colabelled with EOMES and PAX6 was detected in the RL transitional zone, 
       # wherein PAX6+ give rise to GCPs and UBCs -> potential lineage trajectory from TCPs to UBCs through PAX6+ intermediates.
-lu.02TCP.genes <- c("SOX11","HNRNPH1","CTNNB1")
+lu.02TCP.genes <- c("SOX11","HNRNPH1")
 lu_02TCP_genes <- plot_cells(cds_lu,
            genes=lu.02TCP.genes,
            label_cell_groups=FALSE,
@@ -570,9 +583,9 @@ plot_title <- "02TCP gene markers"
 # Add the title to the plot
 plottcp <- lu_02TCP_genes +
   ggtitle(plot_title) +
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+  theme(plot.title = element_text(hjust = 0.5, size= 15, face = "bold"))
 
-ggsave(plotnsc, height = 7, width = 9, 
+ggsave(plottcp, height = 7, width = 9, 
        file="~/SeuratProject/Lu data analysis/Trajectory Analysis/MarkerGenes_02TCP.png")
 
 # 06GCP_pro
@@ -636,7 +649,7 @@ ggsave(plotgcp2, height = 7, width = 9,
 
 # 09Granule
     # other markers "NEUROD2", "HNRNPH1","SOX11","CTNNB1"
-lu.09Granule.genes <- c("GAP43","NEUROD2")
+lu.09Granule.genes <- c("GAP43","NEUROD2", "STMN2")
 
 lu_09Granule_genes <- plot_cells(cds_lu,
                               genes=lu.09Granule.genes,
@@ -649,7 +662,7 @@ plot_title <- "09Granule gene markers"
 # Add the title to the plot
 plotgran <- lu_09Granule_genes +
   ggtitle(plot_title) +
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+  theme(plot.title = element_text(hjust = 0.5, size = 15, face = "bold"))
 
 ggsave(plotgran, height = 7, width = 9, 
        file="~/SeuratProject/Lu data analysis/Trajectory Analysis/MarkerGenes_09Granule.png")
@@ -695,8 +708,8 @@ ggsave(plotubc, height = 7, width = 9,
        file="~/SeuratProject/Lu data analysis/Trajectory Analysis/MarkerGenes_11UBC.png")
 
 # 12UBCdiff
-    # other markers "HNRNPH1","SOX11","CTNNB1","GAP43"
-lu.12UBCdiff.genes <- c("GAP43","NTF3","SOX11")
+    # other markers "HNRNPH1","SOX11","CTNNB1","GAP43", "NHLH2", "NHLH1", "APLP2", "CFAP298"
+lu.12UBCdiff.genes <- c("GAP43","CFAP298","SOX11","NHLH2")
 
 lu_12UBCdiff_genes <- plot_cells(cds_lu,
                              genes=lu.12UBCdiff.genes,
@@ -709,7 +722,7 @@ plot_title <- "12UBCdiff gene markers"
 # Add the title to the plot
 plotubcdiff <- lu_12UBCdiff_genes +
   ggtitle(plot_title) +
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+  theme(plot.title = element_text(hjust = 0.5, size = 15, face = "bold"))
 
 ggsave(plotubcdiff, height = 7, width = 9, 
        file="~/SeuratProject/Lu data analysis/Trajectory Analysis/MarkerGenes_12UBCdiff.png")
@@ -815,7 +828,7 @@ meta.wnt <- plot_cells(cds_lu,
     aesthetics = "colour"
   )
 
-metagenes <- plot_grid(meta.g3,meta.g4,meta.shh,meta.wnt, labels=c("j", "k","l","m"), ncol = 2, nrow = 2)
+metagenes <- plot_grid(meta.g3,meta.g4,meta.shh,meta.wnt, labels=c("j","k","l","m"), ncol = 2, nrow = 2)
 ggsave(metagenes, height=14,width=20,file="~/SeuratProject/Lu data analysis/Trajectory analysis/Grid_Lu_Trajectory_Metagene.png")
 
 library(gridExtra)
@@ -842,7 +855,37 @@ plot_grid(lu.dimplot.cluster.names,
 
 plot_grid(lu.dimplot.all,grid_lu_vp_projection) -> final.lu.dimplot.all
 
-all_projection <- plot_grid(final.lu.dimplot.all,metagenes, ncol = 1, nrow = 2, rel_widths = c(1.4,1))
+all_projection <- plot_grid(final.lu.dimplot.all,metagenes, ncol = 1, nrow = 2, rel_widths = c(1.5,0.6))
 
 ggsave(all_projection, height=30,width=18,file="~/SeuratProject/Lu data analysis/Trajectory analysis/Grid_Lu_Projection_And_Trajectory.VPFP.png")
 ggsave(final.lu.dimplot.all, height=14, width=22, file="~/SeuratProject/Lu data analysis/Trajectory analysis/Grid_Lu_Projection_VPFP.png")
+
+# Figures for dissertation
+
+dissplot_trajectory <- plot_grid(lu.clusters.trajectory, Lu_Pseudotime_Trajectory, nrow = 1, labels = c("j","k"))
+
+dissplot_markers <- plot_grid(plottcp, plotgran, plotubcdiff, labels = c("d"), nrow=3,rel_heights = c(1.3,1,1))
+ggsave(dissplot_markers, height=10, width=7, file="~/SeuratProject/Lu data analysis/Dissplots/Lu_markers.png")
+
+dissplot_a <- plot_grid(dissplot_trajectory, dissplot_markers, nrow=2, rel_heights = c(1.5,1))
+
+dissplot_all <- plot_grid(final.lu.dimplot.all, dissplot_a, nrow=2)#, rel_heights = c(1.6,1))
+
+ggsave(dissplot_all, height=23, width=15, file="~/SeuratProject/Lu data analysis/Dissplots/Dissplots1_Lu.png")
+
+# Poster figures
+lu.dimplot.poster <- DimPlot(object = subset.cerebellum.data, group.by = "cluster.names", label = F) + theme(legend.position = "right")
+
+poster1 <- plot_grid(lu.clusters.trajectory, lu.dimplot.poster,lu.clusters.trajectory,nrow=1, rel_widths = c(1,1.7,0.8), labels = c("a","b"))
+
+poster2 <- plot_grid(lu_gr3_featureplot,
+                     lu_gr4_featureplot,
+                     lu_shh_featureplot,
+                     lu_wnt_featureplot, nrow = 1, rel_widths = c(1,1,1,1,1), labels = c("c"))
+
+poster <- plot_grid(poster1,poster2,nrow=2)
+ggsave(poster1, height=7, width=16, file="~/SeuratProject/Lu data analysis/Dissplots/Poster_Dissplots1_Lu.png")
+ggsave(poster2, height=5, width=20, file="~/SeuratProject/Lu data analysis/Dissplots/Poster_Dissplots2_Lu.png")
+
+
+

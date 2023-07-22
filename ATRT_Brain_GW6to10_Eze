@@ -1,9 +1,10 @@
-#sequenced brain cells from 10 individuals during the first trimester 
-#of human development, from Carnegie stages (CS) 12 to 22 or GW 6–10. 
-# ‘other’: endothelial cells, microglia and pericytes 
+# Brain cells from 10 individuals during the first trimester of human development, from Carnegie stages (CS) 12 to 22 or GW 6–10. 
+# This script has excluded ‘other’: endothelial cells, microglia and pericytes 
 # https://www.nature.com/articles/s41593-020-00794-1
 # https://cells-test.gi.ucsc.edu/?ds=early-brain
-# ipc: intermediate progenitor cells
+
+# This is the finished object. Run the script below to skip running the whole script.
+# brain.data2 <- readRDS(file="/home/raisaa/SeuratProject2/ATRT_Eze/brain.data2.rds")
 
 library(dplyr)
 library(Seurat)
@@ -12,8 +13,6 @@ library(R.utils)
 library(ggplot2)
 require(Seurat)
 require(data.table)
-
-brain.data2 <- readRDS(file="/home/raisaa/SeuratProject2/ATRT_Eze/brain.data2.rds")
 
 mat <- fread("/home/raisaa/SeuratProject2/exprMatrix.tsv")
 meta <- data.frame(fread("/home/raisaa/SeuratProject2/ATRT_Eze/meta2.tsv"), row.names=1)
@@ -32,13 +31,6 @@ annotations.matched <- annotations[match.idx,]
 Cell.Type <- annotations.matched[,"Cell.Type"]
 names(Cell.Type) <- rownames(brain.data2@meta.data)
 brain.data2$Cell.Type <- Cell.Type
-
-match.idx <- match(rownames(brain.data2@meta.data), annotations$Progenitor.Cluster.Original)
-annotations.matched <- annotations[match.idx,]
-
-Progenitor.Cluster.Original <- annotations.matched[,"Progenitor.Cluster.Original"]
-names(Progenitor.Cluster.Original) <- rownames(brain.data2@meta.data)
-brain.data2$Progenitor.Cluster.Original <- Progenitor.Cluster.Original
 
 # Set the default assay
 DefaultAssay(brain.data2) <- "RNA"
@@ -60,9 +52,9 @@ brain.data2 <- brain.data2[,brain.data2$Cell.Type%in%chosen.cell.types]
 
 # Visualize QC metrics as a violin plot
 eze.qc.metrics <- VlnPlot(brain.data2, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, group.by="Cell.Type", pt.size=0)
-eze.qc.metrics1 <- VlnPlot(brain.data2, features = c("nFeature_RNA"), group.by="Cell.Type", pt.size=0)
+eze.qc.metrics1 <- VlnPlot(brain.data2, features = c("nFeature_RNA"), group.by="Cell.Type", pt.size=0) 
 eze.qc.metrics2 <- VlnPlot(brain.data2, features = c("nCount_RNA"), group.by="Cell.Type", pt.size=0)
-eze.qc.metrics3 <- VlnPlot(brain.data2, features = c("percent.mt"), group.by="Cell.Type", pt.size=0)
+eze.qc.metrics3 <- VlnPlot(brain.data2, features = c("percent.mt"), group.by="Cell.Type", pt.size=0) 
 ggsave(eze.qc.metrics, height = 14, width = 21, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Basic Seurat/Eze_QC_Metrics.png")
 
 # Feature scatter to visualize feature-feature relationships
@@ -132,7 +124,92 @@ p2 <- DimPlot(brain.data2, reduction = "umap", label = T, group.by = "seurat_clu
 eze_umap <- p1+p2
 ggsave(eze_umap, width = 23, height = 11, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Basic Seurat/Eze_UMAP.png")
 
-saveRDS(brain.data2, file="~/SeuratProject2/ATRT_Eze/brain.data2.rds")
+
+# Find all markers
+# find markers for every cluster compared to all remaining cells, report only the positive
+# ones
+eze.markers <- FindAllMarkers(brain.data2, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+eze.markers %>%
+  group_by(cluster) %>%
+  slice_max(n = 30, order_by = avg_log2FC) -> top10.eze
+saveRDS(top10.eze, file="~/SeuratProject2/ATRT_Eze/topEzemarker.rds")
+top10.eze <- readRDS(file="~/SeuratProject2/ATRT_Eze/topEzemarker.rds")
+write.table(top10.eze, file = "~/SeuratProject2/ATRT_Eze/topezemarker.tsv", sep = "\t", row.names = FALSE)
+
+t <- DoHeatmap(brain.data2, features = top10.eze$gene) + NoLegend()
+# Adjust the size and aspect ratio of the heatmap plot
+ggsave(filename = "~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/Heatmap.png",
+       plot = t, height = 8, width = 12, units = "in", dpi = 300)
+
+fp_1_eze <- FeaturePlot(brain.data2, features = c("GFAP","CRYAB","CXCL14","S100A10","HOPX","CLU","ID1","ATP1B2","B2M","ID3"), ncol = 5, label = T, label.size = 2.5) 
+fp_1_ander <- FeaturePlot(brain.data2, features = c("GFAP","CRYAB","CXCL14","S100A10","HOPX","CLU","ID1","ATP1B2","B2M","ID3"), ncol = 5, label=T, label.size = 2.5)
+fp_1_poli <- FeaturePlot(seurat_obj, features = c("GFAP","HOPX","CLU","ATP1B2","B2M"), ncol = 5, label = T, label.size = 3)
+fp_1 <- plot_grid(fp_1_eze,fp_1_ander,fp_1_poli, labels = c("a","b","c"), nrow=3, rel_heights = c(1.55,1.55,1))
+ggsave(fp_1, height = 13, width =17, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/FP_1_MARKERS.png")
+
+
+# These are the clusters that SHH_metagene projected onto
+# Cluster 3
+cluster3.markers <- FindMarkers(brain.data2, ident.1 = 3,min.pct = 0.5)
+head(cluster3.markers, n = 20)
+
+cluster6.markers <- FindMarkers(brain.data2, ident.1 = 6, min.pct = 0.25)
+head(cluster6.markers, n = 20)
+
+cluster8.markers <- FindMarkers(brain.data2, ident.1 = 8, min.pct = 0.25)
+head(cluster8.markers, n = 20)
+
+cluster10.markers <- FindMarkers(brain.data2, ident.1 = 10, min.pct = 0.5)
+head(cluster10.markers, n = 20)
+
+# MYC_metagene
+cluster7.markers <- FindMarkers(brain.data2, ident.1 = 7, min.pct = 0.5)
+head(cluster7.markers, n = 20)
+
+cluster1.markers <- FindMarkers(brain.data2, ident.1 = 1, min.pct = 0.5)
+head(cluster1.markers, n = 20)
+
+cluster10.markers <- FindMarkers(brain.data2, ident.1 = 10, min.pct = 0.5)
+head(cluster10.markers, n = 20)
+
+# SHH metagene
+cluster10.markers <- FindMarkers(brain.data2, ident.1 = 10, min.pct = 0.5)
+head(cluster10.markers, n = 20)
+
+cluster19.markers <- FindMarkers(brain.data2, ident.1 = 19, min.pct = 0.5)
+head(cluster19.markers, n = 20)
+
+cluster6.markers <- FindMarkers(brain.data2, ident.1 = 6, min.pct = 0.5)
+head(cluster6.markers, n = 20)
+
+cluster8.markers <- FindMarkers(brain.data2, ident.1 = 8, min.pct = 0.5)
+head(cluster8.markers, n = 20)
+
+# Boxplot to see tumour markers that are expressed in the dataset
+# This is the script boxplot(MRT.subgroup.exp[[1]]["ENSG00000184486",]~MRT.subgroup.anno[[1]]$NMFCall)
+# SHH
+boxplot(brain.data2["ENSG00000184486",]~MRT.subgroup.anno[[1]]$NMFCall)
+
+shh_fp <- FeaturePlot(brain.data2, features = c("POU3F2","GRIA2","NRXN1","ERBB4","ASCL1","RUNX1T1","ELAVL4","SYT1","STMN2"), cols= c("grey", "green"), ncol=4, min.cutoff = 1, max.cutoff = 5)
+
+# MYC
+myc_fp <- FeaturePlot(brain.data2, features = c("S100A6"), cols= c("grey", "yellow"), ncol=2, min.cutoff = 1, max.cutoff = 5)
+
+subgroups_fp <- plot_grid(shh_fp,myc_fp, nrow=1)
+ggsave(subgroups_fp, height=10, width=25, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/FP_GeneSubgroups.png")
+
+# This is to plot top gene markers for each subgroup
+# SHH
+shh_markers_fp <- FeaturePlot(brain.data2, features = c("SOX1","POU3F2","PTPRZ1","FABP7","TOX3","BRINP1","TTYH1","BCHE","TUBB2B","PCDH9"), min.cutoff = 1, cols= c("grey", "green"), ncol=2)
+
+# MYC
+myc_markers_fp <- FeaturePlot(brain.data2, features = c("MEOX2","DNM3OS","H19","HOXC6","TNNT1","LUM","CDC42EP5","VGLL3","HOXC9","NEFH"), min.cutoff = 0, cols= c("grey", "yellow"),ncol=2)
+
+# TYR
+tyr_markers_fp <- FeaturePlot(brain.data2, features = c("HTR2C","CLIC6","TPD52L1","PCP4","ENPP2","CP","RMST","SOST","OTX2-AS1","SOX1"), min.cutoff = 0, cols= c("grey", "red"),ncol=2)
+
+markerssubgroups_fp <- plot_grid(shh_markers_fp,myc_markers_fp,tyr_markers_fp, nrow=1)
+ggsave(markerssubgroups_fp, height=14, width=24, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/FP_SubgroupMarkers.png")
 
 ############# SAVE OBJECTS ##############
 ##### SAVE ALL OBJECTS ######
@@ -166,7 +243,7 @@ tpms.mat.in <- as.data.frame(brain.data2[["RNA"]]@scale.data)
 
 ensembl_IDs <- rownames(tpms.mat.in)
 
-mart <- useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", host="https://useast.ensembl.org")
+mart <- useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl") #, host="https://useast.ensembl.org")
 
 symbols <- getBM(attributes = c("hgnc_symbol", "ensembl_gene_id"),  
                  filters = "hgnc_symbol",
@@ -211,9 +288,9 @@ logistic.atrt.tpms -> brain.data2$logistic.atrt.tpms
 as.numeric(tpms.mat[3,]) -> brain.data2$ATRT_metagene
 
 # Plot violin plots for each metagenes
-eze_atrt_violinplot <- VlnPlot(brain.data2, features = "ATRT_metagene", group.by = "Cell.Type",pt.size=0)
+eze_atrt_violinplot <- VlnPlot(brain.data2, features = "ATRT_metagene", group.by = "Cell.Type",pt.size=0) + theme(legend.position = "none")  
 eze_dimplot <- DimPlot(object = brain.data2, group.by = "Cell.Type", label = T)
-eze_atrt_featureplot <- FeaturePlot(object = brain.data2,  "ATRT_metagene", min.cutoff = 0, label = T)
+eze_atrt_featureplot <- FeaturePlot(object = brain.data2,  "ATRT_metagene", min.cutoff = 0.5, label = T)
 
 ggsave(eze_atrt_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/FP_Projection.png")
 ggsave(eze_atrt_violinplot, width = 13, height = 11, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/VP_Projection.png")
@@ -248,26 +325,47 @@ as.numeric(tpms.mat[2,]) -> brain.data2$MYC_metagene
 as.numeric(tpms.mat[1,]) -> brain.data2$TYR_metagene
 
 # Plot violin plots for each metagenes
-eze_shh_violinplot <- VlnPlot(brain.data2, features = "SHH_metagene", group.by = "Cell.Type", pt.size=0)
-eze_myc_violinplot <- VlnPlot(brain.data2, features = "MYC_metagene" ,group.by = "Cell.Type", pt.size=0)
-eze_tyr_violinplot <- VlnPlot(brain.data2, features = "TYR_metagene" ,group.by = "Cell.Type",pt.size=0)
+eze_shh_violinplot <- VlnPlot(brain.data2, features = "SHH_metagene", group.by = "Cell.Type", pt.size=0) + theme(legend.position = "none")  
+eze_myc_violinplot <- VlnPlot(brain.data2, features = "MYC_metagene" ,group.by = "Cell.Type", pt.size=0) +  theme(legend.position = "none")  
+eze_tyr_violinplot <- VlnPlot(brain.data2, features = "TYR_metagene" ,group.by = "Cell.Type",pt.size=0) +  theme(legend.position = "none")  
 
-eze_shh_featureplot <- FeaturePlot(object = brain.data2,  "SHH_metagene", cols = c("grey","green"), min.cutoff = 0, label = T)
-eze_myc_featureplot <- FeaturePlot(object = brain.data2, "MYC_metagene", cols = c("grey","yellow"), min.cutoff = 0, max.cutoff = 0.1, label = T)
-eze_tyr_featureplot <- FeaturePlot(object = brain.data2, "TYR_metagene", cols = c("grey","red"),min.cutoff=0, label = T)
+eze_shh_featureplot <- FeaturePlot(object = brain.data2,  "SHH_metagene", cols = c("grey","green"), min.cutoff = 0.5, label = T)
+eze_myc_featureplot <- FeaturePlot(object = brain.data2, "MYC_metagene", cols = c("grey","yellow"), min.cutoff = 0.5, label = T)
+eze_tyr_featureplot <- FeaturePlot(object = brain.data2, "TYR_metagene", cols = c("grey","red"),min.cutoff=0.5, label = T)
+
+# Plot violin plots for each metagenes (clusters)
+eze_shh_violinplot3 <- VlnPlot(brain.data2, features = "SHH_metagene", group.by = "seurat_clusters", pt.size=0) + theme(legend.position = "none") 
+eze_myc_violinplot3 <- VlnPlot(brain.data2, features = "MYC_metagene", group.by = "seurat_clusters", pt.size=0) +  theme(legend.position = "none")  
+eze_tyr_violinplot3 <- VlnPlot(brain.data2, features = "TYR_metagene", group.by = "seurat_clusters", pt.size=0) + theme(legend.position = "none") 
+eze_atrt_violinplot3 <-  VlnPlot(brain.data2, features = "ATRT_metagene", group.by = "seurat_clusters", pt.size=0) + theme(legend.position = "none")  
 
 ggsave(eze_shh_violinplot, width = 13, height = 11, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/VP_shhProjection.png")
 ggsave(eze_myc_violinplot, width = 13, height = 11, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/VP_mycProjection.png")
 ggsave(eze_tyr_violinplot, width = 13, height = 11, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/VP_tyrProjection.png")
-VP_All_Eze <- plot_grid(eze_atrt_violinplot, eze_shh_violinplot,eze_myc_violinplot,eze_tyr_violinplot, ncol=2, nrow=2) +theme(legend.position = "right")
+VP_All_Eze <- plot_grid(eze_atrt_violinplot, eze_shh_violinplot,eze_myc_violinplot,eze_tyr_violinplot, ncol=2, nrow=2, labels = c("f","g","h","i"), label_size = 20) +theme(legend.position = "right")
 ggsave(VP_All_Eze,  width = 14, height = 11, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/VP_All_Projection.png")
+
+ggsave(eze_shh_violinplot3, width = 13, height = 11, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/3_VP_shhProjection.png") 
+ggsave(eze_myc_violinplot3, width = 13, height = 11, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/3_VP_mycProjection.png")
+ggsave(eze_tyr_violinplot3, width = 13, height = 11, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/3_VP_tyrProjection.png")
+VP_All_Eze3 <- plot_grid(eze_atrt_violinplot3,eze_shh_violinplot3,eze_myc_violinplot3,eze_tyr_violinplot3, ncol=2, nrow=2, labels = c("j","k","l","m"), label_size = 20) +theme(legend.position = "right")
+ggsave(VP_All_Eze3,  width = 14, height = 12, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/3_VP_All_Projection.png")
 
 ggsave(eze_shh_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/FP_shhProjection.png")
 ggsave(eze_myc_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/FP_mycProjection.png")
 ggsave(eze_tyr_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/FP_tyrProjection.png")
-FP_All_Eze <- plot_grid(eze_atrt_featureplot, eze_shh_featureplot,eze_myc_featureplot,eze_tyr_featureplot, ncol=2, nrow=2) +theme(legend.position = "right")
+FP_All_Eze <- plot_grid(eze_atrt_featureplot, eze_shh_featureplot,eze_myc_featureplot,eze_tyr_featureplot, ncol=2, nrow=2, labels = c("b","c","d","e"), label_size = 20) +theme(legend.position = "right")
 ggsave(FP_All_Eze,  width = 14, height = 13, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/FP_All_Projection.png")
 
-all <- plot_grid(eze_dimplot,FP_All_Eze,VP_All_Eze, width=23, height=13, rel_widths = c(1,1.2,1))
-ggsave(all, width = 27, height = 19, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/FP_VP_All_Projection.png")
+all <- plot_grid(eze_dimplot,FP_All_Eze,VP_All_Eze,VP_All_Eze3, rel_widths = c(1,1.4,1,1.4), nrow=1)
+all <- plot_grid(eze_dimplot,FP_All_Eze,VP_All_Eze,VP_All_Eze3, rel_widths = c(1,1.4,1,1.4), nrow=2, ncol=2, rel_heights = c(1,1.2), labels = c("a"," "," "," "), label_size = 20)
+ggsave(all, width = 20, height = 20, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Metagene projection/FP_VP_All_Projection.png")
 
+poster1 <- plot_grid(eze_dimplot,eze_atrt_featureplot, nrow=1, rel_widths = c(1,1), labels = c("a","b"))
+poster2 <- plot_grid(eze_shh_featureplot,eze_myc_featureplot,eze_tyr_featureplot, nrow=1, labels = c("c"))
+poster <- plot_grid(poster1, poster2, nrow=2)
+ggsave(poster1, width = 15, height = 7, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Dissplot/Poster_Dissplots.png")
+ggsave(poster, width = 14, height = 9, file="~/SeuratProject2/ATRT_Eze/Eze data analysis/Dissplot/Poster_Dissplots_All.png")
+
+
+saveRDS(brain.data2, file="~/SeuratProject2/ATRT_Eze/brain.data2.rds")

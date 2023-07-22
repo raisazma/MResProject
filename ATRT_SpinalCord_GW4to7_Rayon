@@ -1,3 +1,6 @@
+# Atlas of human developing spinal cord (GW 4 to 7)
+# https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE171892
+
 library(dplyr)
 
 library(Seurat)
@@ -7,6 +10,9 @@ library(patchwork)
 library(R.utils)
 
 library(ggplot2)
+
+# This is the finished object
+# spinal.cord.big <- readRDS(file="~/SeuratProject2/ATRT_Rayon/spinal.cord.big.rds")
 
 spinal.cord.big <- readRDS(file = "/home/raisaa/SeuratProject2/ATRT_Rayon/human_neural.rds")
 
@@ -55,7 +61,7 @@ names(type_step1) <- rownames(spinal.cord.big@meta.data)
 spinal.cord.big$type <- type_step1
 
 # Create an object of chosen cell types
-chosen.cell.types <- c("DRG Progenitor","Mesoderm I","Mesoderm II","Mesoderm III","Mesoderm IV","Mesoderm V","Mesoderm VI","Neural crest progenitor",
+chosen.cell.types <- c("DRG Progenitor","Mesoderm I","Mesoderm II","Mesoderm III","Mesoderm IV","Neural crest progenitor",
                        "Neuron","Oligodendrocyte","Peripheral Neuron","Progenitor","Sensory neuron progenitor")
 
 ### subset the columns of this large seurat object to give only the cluster we want
@@ -91,7 +97,7 @@ spinal.cord.big <- subset(spinal.cord.big, subset = nFeature_RNA > 200 & nFeatur
 spinal.cord.big <- NormalizeData(spinal.cord.big)
 
 # plot variable features with and without labels
-spinal.cord.big <- FindVariableFeatures(spinal.cord.big, selection.method = "vst", nfeatures = 2000)
+spinal.cord.big <- FindVariableFeatures(spinal.cord.big, selection.method = "vst", nfeatures = 5000)
 
 # Identify the 10 most highly variable genes
 top10 <- head(VariableFeatures(spinal.cord.big), 10)
@@ -145,6 +151,104 @@ p1 <- DimPlot(spinal.cord.big, reduction = "umap", label = T, group.by = "type")
 p2 <- DimPlot(spinal.cord.big, reduction = "umap", label = T)
 Rayon_umap <- p1+p2
 ggsave(Rayon_umap, width = 23, height = 11, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Basic Seurat/Rayon_UMAP.png")
+
+
+# Plot gene markers
+# Neural crest progenitor
+FeaturePlot(spinal.cord.big, features = c("SOX10","SOX2"))
+
+# Sensory neuron progenitor
+FeaturePlot(spinal.cord.big, features = c("NEUROD1", "NEUROG1", "NEUROG2"))
+
+# Sensory neuron progenitor
+FeaturePlot(spinal.cord.big, features = c("STMN2", "MAP2", "ELAVL3"))
+
+# Find all markers
+# find markers for every cluster compared to all remaining cells, report only the positive
+# ones
+rayon.markers <- FindAllMarkers(spinal.cord.big, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+rayon.markers %>%
+  group_by(cluster) %>%
+  slice_max(n = 30, order_by = avg_log2FC) -> top10.rayon
+saveRDS(top10.rayon, file="~/SeuratProject2/ATRT_Rayon/toprayonmarker.rds")
+top10.rayon <- readRDS(file="~/SeuratProject2/ATRT_Rayon/toprayonmarker.rds")
+
+write.table(top10.rayon, file = "~/SeuratProject2/ATRT_Rayon/toprayonmarker.tsv", sep = "\t", row.names = FALSE)
+
+# MYC metagene
+cluster9.markers <- FindMarkers(spinal.cord.big, ident.1 = 9, min.pct = 0.5)
+head(cluster9.markers, n = 50)
+
+fp_9 <- FeaturePlot(spinal.cord.big, features = c("HIST1H4C", "CENPF", "NUSAP1", "HMGB2", "PTTG1", "TOP2A", "UBE2C", "TPX2", "TUBB4B", "HMGN2"), ncol = 5)
+fp_12 <- FeaturePlot(spinal.cord.big, features = c("SPARCL1","FABP7","BCAN","HOPX","FAM181B"), ncol=5)
+fp_myc_rayon <- plot_grid(fp_9,fp_12, labels = c("a","b"), nrow=2, rel_heights = c(1.6,1))
+ggsave(fp_myc_rayon, height = 9, width =15, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/FP_MYC_MARKERS.png")
+
+cluster10.markers <- FindMarkers(spinal.cord.big, ident.1 = 10, min.pct = 0.5)
+head(cluster8.markers, n = 50)
+
+cluster12.markers <- FindMarkers(spinal.cord.big, ident.1 = 12, min.pct = 0.5)
+head(cluster12.markers, n = 20)
+
+cluster14.markers <- FindMarkers(spinal.cord.big, ident.1 = 14, min.pct = 0.5)
+head(cluster14.markers, n = 20)
+
+# SHH metagene
+cluster2.markers <- FindMarkers(spinal.cord.big, ident.1 = 2, min.pct = 0.5)
+head(cluster2.markers, n = 20)
+
+cluster3.markers <- FindMarkers(spinal.cord.big, ident.1 = 3, min.pct = 0.5)
+head(cluster3.markers, n = 20)
+
+cluster13.markers <- FindMarkers(spinal.cord.big, ident.1 = 13, min.pct = 0.5)
+head(cluster13.markers, n = 20)
+
+cluster7.markers <- FindMarkers(spinal.cord.big, ident.1 = 7, min.pct = 0.5)
+head(cluster7.markers, n = 20)
+
+# TYR metagene
+cluster15.markers <- FindMarkers(spinal.cord.big, ident.1 = 15, min.pct = 0.5)
+head(cluster15.markers, n = 20)
+
+cluster2.markers <- FindMarkers(spinal.cord.big, ident.1 = 2, min.pct = 0.5)
+head(cluster2.markers, n = 20)
+
+cluster3.markers <- FindMarkers(spinal.cord.big, ident.1 = 3, min.pct = 0.5)
+head(cluster3.markers, n = 20)
+
+cluster8.markers <- FindMarkers(spinal.cord.big, ident.1 = 8, min.pct = 0.5)
+head(cluster8.markers, n = 20)
+
+cluster13.markers <- FindMarkers(spinal.cord.big, ident.1 = 13, min.pct = 0.5)
+head(cluster13.markers, n = 20)
+
+# Boxplot to see tumour markers that are expressed in the dataset
+# This is the script boxplot(MRT.subgroup.exp[[1]]["ENSG00000184486",]~MRT.subgroup.anno[[1]]$NMFCall)
+# SHH
+
+shh_fp <- FeaturePlot(spinal.cord.big, features = c("GRIA2","MAP2","MIR124-2HG","ZFHX4-AS1","ELAVL4","SLC1A2","SCN3A","CSRNP3"), cols= c("grey", "green"), ncol=2, min.cutoff = 1, max.cutoff = 5)
+
+# MYC
+#myc_fp <- FeaturePlot(spinal.cord.big, features = c(), cols= c("grey", "yellow"), ncol=2, min.cutoff = 1, max.cutoff = 5)
+
+# TYR
+tyr_fp <- FeaturePlot(spinal.cord.big, features=c("ADGRV1","SERPINF1"), cols= c("grey", "red"), ncol=1, min.cutoff = 1, max.cutoff = 5)
+
+subgroups_fp <- plot_grid(shh_fp,tyr_fp, nrow=1, rel_widths= c(1.1,1.3,0.7))
+ggsave(subgroups_fp, height=14, width=24, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/FP_GeneSubgroups.png")
+
+# This is to plot top gene markers for each subgroup
+# SHH
+shh_markers_fp <- FeaturePlot(spinal.cord.big, features = c("SOX1","POU3F2","PTPRZ1","FABP7","TOX3","BRINP1","TTYH1","BCHE","TUBB2B","PCDH9"), min.cutoff = 0.7, cols= c("grey", "green"), ncol=2)
+
+# MYC
+myc_markers_fp <- FeaturePlot(spinal.cord.big, features = c("MEOX2","DNM3OS","H19","HOXC6","TNNT1","LUM","CDC42EP5","VGLL3","HOXC9","NEFH"), min.cutoff = 0, cols= c("grey", "yellow"),ncol=2)
+
+# TYR
+tyr_markers_fp <- FeaturePlot(spinal.cord.big, features = c("HTR2C","CLIC6","TPD52L1","PCP4","ENPP2","CP","RMST","SOST","OTX2-AS1","SOX1"), min.cutoff = 0, cols= c("grey", "red"),ncol=2)
+
+markerssubgroups_fp <- plot_grid(shh_markers_fp,myc_markers_fp,tyr_markers_fp, nrow=1)
+ggsave(markerssubgroups_fp, height=14, width=24, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/FP_SubgroupMarkers.png")
 
 ##### SAVE ALL OBJECTS ######
 library(cowplot)
@@ -255,36 +359,48 @@ as.numeric(tpms.mat[1,]) -> spinal.cord.big$TYR_metagene
 # Plot violin plots for each metagenes
 Rayon_atrt_violinplot <- VlnPlot(spinal.cord.big, features = "ATRT_metagene", group.by = "type", pt.size=0) + theme(legend.position = "none")
 Rayon_dimplot <- DimPlot(object = spinal.cord.big, group.by = "type", label=T)
-Rayon_atrt_featureplot <- FeaturePlot(object = spinal.cord.big,  "ATRT_metagene", min.cutoff = 0)
+Rayon_dimplot_clusters <- DimPlot(object = spinal.cord.big, group.by = "seurat_clusters", label=T)
+Rayon_atrt_featureplot <- FeaturePlot(object = spinal.cord.big,  "ATRT_metagene", min.cutoff = 0.5, label = T)
 
 # Plot violin plots for each metagenes
 Rayon_shh_violinplot <- VlnPlot(spinal.cord.big, features = "SHH_metagene", group.by = "type", pt.size=0) + theme(legend.position = "none")   
 Rayon_myc_violinplot <- VlnPlot(spinal.cord.big, features = "MYC_metagene", group.by = "type", pt.size=0) + theme(legend.position = "none")
 Rayon_tyr_violinplot <- VlnPlot(spinal.cord.big, features = "TYR_metagene", group.by = "type", pt.size=0) + theme(legend.position = "none")   
 
+# Plot violin plots for each metagenes (clusters)
+Rayon_shh_violinplot3 <- VlnPlot(spinal.cord.big, features = "SHH_metagene", pt.size=0) + theme(legend.position = "none")   
+Rayon_myc_violinplot3 <- VlnPlot(spinal.cord.big, features = "MYC_metagene", group.by = "seurat_clusters", pt.size=0) +  theme(legend.position = "none")  
+Rayon_tyr_violinplot3 <- VlnPlot(spinal.cord.big, features = "TYR_metagene", group.by = "seurat_clusters", pt.size=0) + theme(legend.position = "none")   
+Rayon_atrt_violinplot3 <- VlnPlot(spinal.cord.big, features = "ATRT_metagene", group.by = "seurat_clusters", pt.size=0) + theme(legend.position = "none")   
+  
 Rayon_shh_featureplot <- FeaturePlot(object = spinal.cord.big, 
                                      features = "SHH_metagene", 
                                      cols = c("grey", "green"), 
-                                     min.cutoff = 0)
-Rayon_myc_featureplot <- FeaturePlot(object = spinal.cord.big, "MYC_metagene", cols = c("grey","yellow"), min.cutoff = 0)
-Rayon_tyr_featureplot <- FeaturePlot(object = spinal.cord.big, "TYR_metagene", cols = c("grey","red"),min.cutoff=0) 
+                                     min.cutoff = 0.7, label = T)
+Rayon_myc_featureplot <- FeaturePlot(object = spinal.cord.big, "MYC_metagene", cols = c("grey","yellow"), min.cutoff = 0.6, label=T)
+Rayon_tyr_featureplot <- FeaturePlot(object = spinal.cord.big, "TYR_metagene", cols = c("grey","red"),min.cutoff=0.7, label=T) 
 
 ggsave(Rayon_shh_violinplot, width = 13, height = 11, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/VP_shhProjection.png") 
 ggsave(Rayon_myc_violinplot, width = 13, height = 11, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/VP_mycProjection.png")
 ggsave(Rayon_tyr_violinplot, width = 13, height = 11, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/VP_tyrProjection.png")
-VP_All_Rayon <- plot_grid(Rayon_atrt_violinplot,Rayon_shh_violinplot,Rayon_myc_violinplot,Rayon_tyr_violinplot, ncol=2, nrow=2) +theme(legend.position = "right")
+VP_All_Rayon <- plot_grid(Rayon_atrt_violinplot,Rayon_shh_violinplot,Rayon_myc_violinplot,Rayon_tyr_violinplot, ncol=2, nrow=2, labels = c("f","g","h","i"), label_size = 20) +theme(legend.position = "right")
 ggsave(VP_All_Rayon,  width = 14, height = 12, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/VP_All_Projection.png")
 
 ggsave(Rayon_shh_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/FP_shhProjection.png")
 ggsave(Rayon_myc_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/FP_mycProjection.png")
 ggsave(Rayon_tyr_featureplot, width = 10, height = 11, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/FP_tyrProjection.png")
-FP_All_Rayon <- plot_grid(Rayon_atrt_featureplot,Rayon_shh_featureplot,Rayon_myc_featureplot,Rayon_tyr_featureplot, ncol=2, nrow=2) +theme(legend.position = "right")
+FP_All_Rayon <- plot_grid(Rayon_atrt_featureplot,Rayon_shh_featureplot,Rayon_myc_featureplot,Rayon_tyr_featureplot, ncol=2, nrow=2, labels = c("b","c","d","e"), label_size = 20) +theme(legend.position = "right")
 ggsave(FP_All_Rayon,  width = 14, height = 11, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/FP_All_Projection.png")
 
 ggsave(FP_All_Rayon+VP_All_Rayon, width = 28, height = 13, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/FP_VP_All_Projection.png")
 
-all <- plot_grid(Rayon_dimplot,FP_All_Rayon,VP_All_Rayon, width=23, height=13, rel_widths = c(0.9,1,1))
-ggsave(all, width = 30, height = 20, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/FP_VP_All_Projection.png")
+ggsave(Rayon_shh_violinplot3, width = 13, height = 11, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/3_VP_shhProjection.png") 
+ggsave(Rayon_myc_violinplot3, width = 13, height = 11, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/3_VP_mycProjection.png")
+ggsave(Rayon_tyr_violinplot3, width = 13, height = 11, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/3_VP_tyrProjection.png")
+VP_All_Rayon3 <- plot_grid(Rayon_atrt_violinplot3,Rayon_shh_violinplot3,Rayon_myc_violinplot3,Rayon_tyr_violinplot3, ncol=2, nrow=2, labels = c("j","k","l","m"), label_size = 20) +theme(legend.position = "right")
+ggsave(VP_All_Rayon3,  width = 14, height = 12, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/3_VP_All_Projection.png")
+
+all <- plot_grid(Rayon_dimplot,FP_All_Rayon,VP_All_Rayon,VP_All_Rayon3, width=23, height=13, rel_widths = c(1,1.4,1,1.4), labels = c("a"," "," "," "), label_size = 20, nrow=2,ncol=2)
+ggsave(all, width = 20, height = 20, file="~/SeuratProject2/ATRT_Rayon/Rayon data analysis/Metagene projection/FP_VP_All_Projection.png")
 
 saveRDS(spinal.cord.big, file="~/SeuratProject2/ATRT_Rayon/spinal.cord.big.rds")
-
